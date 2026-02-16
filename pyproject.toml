@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "covert-up"
-version = "1.1.0"
+version = "1.2.1"
 description = "Safe package updater for Python/Django projects"
 readme = "README.md"
 requires-python = ">=3.8"
