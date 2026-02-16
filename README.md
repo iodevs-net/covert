@@ -22,6 +22,7 @@ Covert is a safe package updater tool for Python/Django projects that automatica
 - **Dependency Tree Awareness**: Smart update ordering based on project dependency graph (requires `pipdeptree`)
 - **Automatic Manifest Synchronization**: Automatically updates your `requirements.txt` or `pyproject.toml` files after successful updates
 - **Vulnerability-Driven Prioritization**: Intelligence to prioritize updates for packages with known security vulnerabilities
+- **Automatic Configuration**: Detects manifest files (`requirements.txt`, `pyproject.toml`) and updates them automatically
 - **Comprehensive Configuration**: YAML/TOML configuration with sensible defaults
 
 ## Installation
@@ -316,7 +317,7 @@ jobs:
         run: pip install covert-up
       
       - name: Run Covert
-        run: covert --dry-run
+        run: covert
       
       - name: Create Pull Request
         if: github.event_name == 'schedule'
@@ -397,6 +398,15 @@ isort --check-only covert tests
 ruff check covert tests
 mypy covert
 ```
+
+### Release Automation
+
+To release a new version (e.g., 1.2.0):
+
+```bash
+make upgrade
+```
+(This will prompt for the version, update `__init__.py`, tag, and push changes to trigger the publish workflow)
 
 ## Security
 
