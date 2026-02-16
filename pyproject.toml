@@ -34,11 +34,12 @@ classifiers = [
     "Topic :: System :: Software Distribution",
 ]
 dependencies = [
-    "pyyaml>=6.0",
-    "toml>=0.10.2",
-    "rich>=13.0",
-    "packaging>=23.0",
-    "pipdeptree>=2.10.0",
+    "rich>=13.0.0",
+    "toml",
+    "pyyaml",
+    "packaging",
+    "pipdeptree",
+    "safety>=3.0.0",
 ]
 
 [project.optional-dependencies]
