@@ -52,7 +52,7 @@ Nothing removed in this release.
 - Virtual environment requirement to prevent system Python damage
 - Privilege escalation warnings
 
-## [Unreleased]
+## [1.0.0] - 2026-02-16
 
 ### Added
 
