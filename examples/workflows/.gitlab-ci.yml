@@ -1,0 +1,52 @@
+# GitLab CI workflow for Covert updates
+# Save this as .gitlab-ci.yml in your project root
+
+stages:
+  - test
+  - update
+
+variables:
+  PIP_CACHE_DIR: "$CI_PROJECT_DIR/.cache/pip"
+
+cache:
+  paths:
+    - .cache/pip
+    - venv/
+
+update-dependencies:
+  stage: update
+  image: python:3.11-slim
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "schedule"
+    - if: $UPDATE_DEPS == "true"
+  before_script:
+    - pip install --upgrade pip
+    - pip install covert-updater
+  script:
+    - covert --dry-run
+    - covert
+  artifacts:
+    paths:
+      - covert.log
+    expire_in: 7 days
+    when: always
+  allow_failure: true
+
+# Optional: Create merge request (GitLab Premium)
+create-mr:
+  stage: update
+  image: python:3.11-slim
+  needs:
+    - update-dependencies
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "schedule"
+  before_script:
+    - pip install --upgrade pip
+    - pip install glab
+  script:
+    - |
+      glab mr create --title "Update Dependencies" \
+        --description "Automated dependency updates by Covert" \
+        --target-branch main \
+        --source-branch dependency-updates || true
+  when: manual

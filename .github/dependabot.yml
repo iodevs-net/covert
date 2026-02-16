@@ -1,0 +1,70 @@
+# Dependabot Configuration
+# Automated dependency updates for the Covert project
+
+version: 2
+updates:
+  # ==========================================
+  # GitHub Actions updates
+  # ==========================================
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "sunday"
+      time: "00:00"
+      timezone: "UTC"
+    open-pull-requests-limit: 10
+    commit-message:
+      prefix: "ci"
+      include: "scope"
+    labels:
+      - "dependencies"
+      - "github-actions"
+    reviewers:
+      - "maintainer"
+
+  # ==========================================
+  # Python pip dependencies
+  # ==========================================
+  - package-ecosystem: "pip"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "sunday"
+      time: "00:00"
+      timezone: "UTC"
+    open-pull-requests-limit: 10
+    commit-message:
+      prefix: "deps"
+      include: "scope"
+    labels:
+      - "dependencies"
+      - "python"
+    reviewers:
+      - "maintainer"
+    versioning-strategy: "widen"
+    ignore:
+      # Ignore major version updates for development dependencies
+      - dependency-name: "black"
+        update-types: ["major"]
+      - dependency-name: "ruff"
+        update-types: ["major"]
+      - dependency-name: "mypy"
+        update-types: ["major"]
+      - dependency-name: "pytest"
+        update-types: ["major"]
+
+  # ==========================================
+  # Pre-commit hooks updates
+  # ==========================================
+  - package-ecosystem: "pip"
+    directory: ".pre-commit-hooks.yaml"
+    schedule:
+      interval: "monthly"
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "pre-commit"
+      include: "scope"
+    labels:
+      - "dependencies"
+      - "pre-commit"

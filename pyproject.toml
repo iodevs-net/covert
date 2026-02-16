@@ -1,0 +1,122 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "covert-updater"
+version = "1.0.0"
+description = "Safe package updater for Python/Django projects"
+readme = "README.md"
+requires-python = ">=3.8"
+license = {text = "MIT"}
+authors = [
+    {name = "iodevs-net", email = "contact@example.com"}
+]
+keywords = [
+    "dependencies",
+    "updates",
+    "security",
+    "django",
+    "testing",
+    "rollback"
+]
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Software Development",
+    "Topic :: System :: Software Distribution",
+]
+dependencies = [
+    "pyyaml>=6.0",
+    "toml>=0.10.2",
+    "rich>=13.0",
+    "packaging>=23.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+    "pytest-cov>=4.0",
+    "pytest-mock>=3.10",
+    "black>=23.0",
+    "isort>=5.12",
+    "mypy>=1.0",
+    "ruff>=0.1.0",
+]
+docs = [
+    "sphinx>=7.0",
+    "sphinx-rtd-theme>=2.0",
+    "myst-parser>=2.0",
+]
+security = [
+    "pip-audit>=2.5",
+    "safety>=2.3",
+]
+
+[project.scripts]
+covert = "covert.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/iodevs-net/covert"
+Documentation = "https://covert.readthedocs.io"
+Repository = "https://github.com/iodevs-net/covert"
+Issues = "https://github.com/iodevs-net/covert/issues"
+
+[tool.setuptools]
+packages = ["covert"]
+
+[tool.setuptools.package-data]
+covert = ["py.typed"]
+
+[tool.black]
+line-length = 100
+target-version = ["py38", "py39", "py310", "py311", "py312"]
+
+[tool.isort]
+profile = "black"
+line_length = 100
+
+[tool.mypy]
+python_version = "3.8"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+check_untyped_defs = true
+no_implicit_optional = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = [
+    "--strict-markers",
+    "--strict-config",
+    "--cov=covert",
+    "--cov-report=term-missing",
+    "--cov-report=html",
+]
+markers = [
+    "unit: Unit tests",
+    "integration: Integration tests",
+    "e2e: End-to-end tests",
+    "slow: Slow running tests",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py38"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "N", "UP", "B", "C4"]
+ignore = ["E501"]

@@ -1,0 +1,36 @@
+# Example Covert configuration file (TOML format)
+
+[project]
+name = "My Django Project"
+python_version = "3.11"
+
+[testing]
+enabled = true
+command = "pytest"
+args = ["-v", "--tb=short"]
+exclude_paths = ["tests/e2e", "soporte/tests/e2e"]
+timeout_seconds = 300
+
+[updates]
+strategy = "sequential"
+max_parallel = 3
+version_policy = "safe"
+ignore_packages = ["package-to-ignore", "another-package"]
+allow_only_packages = []
+
+[backup]
+enabled = true
+location = "./backups"
+retention_days = 30
+format = "txt"
+
+[logging]
+level = "INFO"
+format = "detailed"
+file = "covert.log"
+console = true
+
+[security]
+require_virtualenv = true
+verify_signatures = false
+check_vulnerabilities = true

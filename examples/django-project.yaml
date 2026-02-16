@@ -1,0 +1,51 @@
+# Django Project Configuration for Covert
+# Save this as django-project.yaml in your Django project root
+
+project:
+  name: "My Django Project"
+  python_version: "3.11"
+
+# Test configuration for Django
+testing:
+  enabled: true
+  command: "pytest"
+  args:
+    - "--ds=myproject.settings.test"  # Use test settings
+    - "-v"
+    - "--tb=short"
+    - "-x"  # Stop on first failure
+  exclude_paths:
+    - "tests/e2e"
+    - "tests/integration"
+    - "soporte/tests/e2e"
+  timeout_seconds: 600  # Django tests can take longer
+
+# Update configuration
+updates:
+  strategy: "sequential"
+  max_parallel: 3
+  version_policy: "safe"  # Conservative - avoid breaking changes
+  ignore_packages:
+    - "django"  # Handle Django upgrades manually
+    - "djangorestframework"  # Major DRF upgrades separately
+    - "celery"  # Complex dependency, upgrade manually
+
+# Backup configuration
+backup:
+  enabled: true
+  location: "./backups"
+  retention_days: 30
+  format: "txt"
+
+# Logging configuration
+logging:
+  level: "INFO"
+  format: "detailed"
+  file: "covert.log"
+  console: true
+
+# Security configuration
+security:
+  require_virtualenv: true
+  verify_signatures: false
+  check_vulnerabilities: true

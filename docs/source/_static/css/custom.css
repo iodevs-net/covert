@@ -1,0 +1,40 @@
+/* Custom CSS for Covert Documentation */
+
+/* Adjust the navigation header background */
+.wy-nav-top {
+    background-color: #3073BB;
+}
+
+/* Adjust link colors */
+a {
+    color: #3073BB;
+}
+
+a:hover {
+    color: #255C99;
+}
+
+/* Code block styling */
+.highlight {
+    border-radius: 4px;
+}
+
+/* Note and warning boxes */
+.admonition {
+    border-radius: 4px;
+}
+
+/* Version badges */
+.rst-footer-badge {
+    float: right;
+}
+
+/* Improve table styling */
+table {
+    width: 100%;
+}
+
+/* Adjust the version info */
+.rst-versions {
+    background-color: #f0f0f0;
+}

@@ -1,0 +1,35 @@
+# MANIFEST.in - Package distribution manifest for Covert
+#
+# This file specifies which files should be included in the source distribution
+# and wheel packages when publishing to PyPI.
+
+# Include README and license
+include README.md
+include LICENSE
+include CHANGELOG.md
+include CONTRIBUTING.md
+include SECURITY.md
+
+# Include configuration files
+include pyproject.toml
+
+# Include documentation
+recursive-include docs/source *.py
+recursive-include docs/source *.rst
+recursive-include docs/source *.md
+recursive-include docs/source/_static/css *.css
+
+# Include examples
+recursive-include examples *
+
+# Include plans (for reference)
+recursive-include plans *
+
+# Include type stubs marker
+global-exclude __pycache__
+global-exclude *.py[co]
+global-exclude *.so
+global-exclude *.egg-info
+
+# Exclude test files from wheel
+prune tests/e2e
