@@ -19,6 +19,9 @@ Covert is a safe package updater tool for Python/Django projects that automatica
 - **Dry-Run Mode**: Simulate updates without making any actual changes
 - **Version Policy Control**: Choose from different version update policies (safe, latest, minor, patch)
 - **Virtual Environment Safety**: Requires running in a virtual environment for safety
+- **Dependency Tree Awareness**: Smart update ordering based on project dependency graph (requires `pipdeptree`)
+- **Automatic Manifest Synchronization**: Automatically updates your `requirements.txt` or `pyproject.toml` files after successful updates
+- **Vulnerability-Driven Prioritization**: Intelligence to prioritize updates for packages with known security vulnerabilities
 - **Comprehensive Configuration**: YAML/TOML configuration with sensible defaults
 
 ## Installation

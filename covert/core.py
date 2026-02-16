@@ -15,13 +15,20 @@ from covert.backup import create_backup
 from covert.config import Config
 from covert.exceptions import SecurityError, UpdateError, ValidationError
 from covert.logger import get_logger
-from covert.pip_interface import get_outdated_packages, install_package, uninstall_package
+from covert.pip_interface import (
+    get_dependency_graph,
+    get_outdated_packages,
+    install_package,
+    uninstall_package,
+)
 from covert.tester import run_tests
 from covert.utils import (
     check_elevated_privileges,
     is_breaking_change,
     is_in_virtualenv,
+    update_manifest_file,
 )
+from covert.vuln_scanner import scan_vulnerabilities
 
 logger = get_logger(__name__)
 
@@ -143,6 +150,7 @@ def run_update_session(
     ignore_packages: Optional[List[str]] = None,
     allow_only_packages: Optional[List[str]] = None,
     parallel: bool = False,
+    sort_by_dependencies: bool = True,
 ) -> UpdateSession:
     """Run a complete update session.
 
@@ -238,6 +246,20 @@ def run_update_session(
             session.end_time = datetime.now()
             return session
 
+        # Step 5b: Prioritize vulnerable packages
+        if config.security.check_vulnerabilities:
+            logger.info("Scanning for vulnerabilities to prioritize updates...")
+            try:
+                vuln_result = scan_vulnerabilities(packages=packages_to_update)
+                if vuln_result.has_vulnerabilities:
+                    vulnerable_names = {v.package_name for v in vuln_result.vulnerabilities}
+                    logger.info(f"Prioritizing {len(vulnerable_names)} vulnerable package(s)")
+
+                    # Sort: vulnerable packages first
+                    packages_to_update.sort(key=lambda p: p["name"] not in vulnerable_names)
+            except Exception as e:
+                logger.warning(f"Vulnerability scan failed: {e}")
+
         logger.info(f"Found {len(packages_to_update)} package(s) to update")
 
         # Step 6: Update each package
@@ -252,6 +274,16 @@ def run_update_session(
             )
             session.results.extend(results)
         else:
+            # Sort by dependencies if requested
+            if sort_by_dependencies:
+                try:
+                    graph = get_dependency_graph()
+                    if graph:
+                        logger.info("Sorting updates by dependency order...")
+                        packages_to_update = _sort_packages_by_deps(packages_to_update, graph)
+                except Exception as e:
+                    logger.warning(f"Failed to sort packages by dependencies: {e}")
+
             for pkg_data in packages_to_update:
                 package = PackageInfo(
                     name=pkg_data["name"],
@@ -328,6 +360,41 @@ def _filter_packages(
         filtered.append(pkg)
 
     return filtered
+
+
+def _sort_packages_by_deps(
+    packages: List[Dict[str, str]], graph: Dict[str, List[str]]
+) -> List[Dict[str, str]]:
+    """Sort packages so that dependencies are updated first (bottom-up)."""
+    pkg_map = {p["name"].lower(): p for p in packages}
+    sorted_names = []
+    visited = set()
+    temp_visited = set()
+
+    def visit(name):
+        name_lower = name.lower()
+        if name_lower in temp_visited:
+            # Cycle or already visiting, stop
+            return
+        if name_lower in visited:
+            return
+
+        temp_visited.add(name_lower)
+
+        # Visit dependencies first
+        if name_lower in graph:
+            for dep in graph[name_lower]:
+                if dep in pkg_map:
+                    visit(dep)
+
+        temp_visited.remove(name_lower)
+        visited.add(name_lower)
+        sorted_names.append(name_lower)
+
+    for pkg_name in pkg_map:
+        visit(pkg_name)
+
+    return [pkg_map[name] for name in sorted_names if name in pkg_map]
 
 
 def _update_package(
@@ -413,6 +480,14 @@ def _update_package(
 
         result.status = UpdateStatus.UPDATED
         logger.info(f"Successfully updated {package.name}")
+
+        # Step 7: Sync manifest files (requirements.txt, pyproject.toml)
+        try:
+            updated_manifests = update_manifest_file(package.name, package.latest_version)
+            for manifest in updated_manifests:
+                logger.info(f"Updated manifest file: {manifest}")
+        except Exception as e:
+            logger.warning(f"Failed to sync manifest files for {package.name}: {e}")
 
     except Exception as e:
         logger.error(f"Failed to update {package.name}: {e}")

@@ -38,14 +38,12 @@ class TestDryRunMode:
             security=SecurityConfig(require_virtualenv=False),
         )
 
-        with patch("covert.pip_interface.get_outdated_packages") as mock_outdated, patch(
-            "covert.pip_interface.install_package"
-        ) as mock_install, patch(
-            "covert.pip_interface.uninstall_package"
-        ) as mock_uninstall, patch(  # noqa: F841
-            "covert.backup.create_backup"
+        with patch("covert.core.get_outdated_packages") as mock_outdated, patch(
+            "covert.core.install_package"
+        ) as mock_install, patch("covert.core.uninstall_package") as mock_uninstall, patch(  # noqa: F841
+            "covert.core.create_backup"
         ) as mock_backup, patch(  # noqa: F841
-            "covert.utils.is_in_virtualenv"
+            "covert.core.is_in_virtualenv"
         ) as mock_venv:
             mock_venv.return_value = True
             mock_outdated.return_value = [
@@ -77,8 +75,8 @@ class TestDryRunMode:
             security=SecurityConfig(require_virtualenv=False),
         )
 
-        with patch("covert.pip_interface.get_outdated_packages") as mock_outdated, patch(
-            "covert.utils.is_in_virtualenv"
+        with patch("covert.core.get_outdated_packages") as mock_outdated, patch(
+            "covert.core.is_in_virtualenv"
         ) as mock_venv:
             mock_venv.return_value = True
             mock_outdated.return_value = [
@@ -115,8 +113,8 @@ class TestDryRunMode:
             security=SecurityConfig(require_virtualenv=False),
         )
 
-        with patch("covert.pip_interface.get_outdated_packages") as mock_outdated, patch(
-            "covert.utils.is_in_virtualenv"
+        with patch("covert.core.get_outdated_packages") as mock_outdated, patch(
+            "covert.core.is_in_virtualenv"
         ) as mock_venv:
             mock_venv.return_value = True
             mock_outdated.return_value = [
@@ -144,8 +142,8 @@ class TestDryRunMode:
             security=SecurityConfig(require_virtualenv=False),
         )
 
-        with patch("covert.pip_interface.get_outdated_packages") as mock_outdated, patch(
-            "covert.utils.is_in_virtualenv"
+        with patch("covert.core.get_outdated_packages") as mock_outdated, patch(
+            "covert.core.is_in_virtualenv"
         ) as mock_venv:
             mock_venv.return_value = True
             mock_outdated.return_value = [
@@ -176,8 +174,8 @@ class TestDryRunMode:
             security=SecurityConfig(require_virtualenv=False),
         )
 
-        with patch("covert.pip_interface.get_outdated_packages") as mock_outdated, patch(
-            "covert.utils.is_in_virtualenv"
+        with patch("covert.core.get_outdated_packages") as mock_outdated, patch(
+            "covert.core.is_in_virtualenv"
         ) as mock_venv:
             mock_venv.return_value = True
             mock_outdated.return_value = [

@@ -22,7 +22,7 @@ from covert.core import (
     _update_package,
     run_update_session,
 )
-from covert.exceptions import ValidationError
+from covert.exceptions import SecurityError, UpdateError, ValidationError
 
 
 class TestUpdateStatus:
@@ -360,7 +360,7 @@ class TestRunUpdateSession:
             security=SecurityConfig(require_virtualenv=True),
         )
 
-        with pytest.raises(ValidationError):
+        with pytest.raises(SecurityError):
             run_update_session(config)
 
     @patch("covert.core.is_in_virtualenv")
@@ -513,7 +513,7 @@ class TestRunUpdateSession:
         assert session.updated_count == 2
         mock_parallel.assert_called_once()
         call_args = mock_parallel.call_args
-        assert call_args[0][3] == 3  # max_parallel
+        assert call_args[0][4] == 3  # max_parallel
 
     @patch("covert.core.is_in_virtualenv")
     @patch("covert.core._update_packages_parallel")

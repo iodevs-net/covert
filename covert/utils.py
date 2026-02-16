@@ -8,8 +8,9 @@ import os
 import re
 import sys
 from pathlib import Path
-from typing import TYPE_CHECKING, Optional, Tuple, Union
+from typing import TYPE_CHECKING, List, Optional, Tuple, Union
 
+import toml
 from packaging.version import InvalidVersion, Version
 
 from covert.exceptions import ValidationError
@@ -324,3 +325,99 @@ def sanitize_path(path: Union[str, Path], allow_absolute: bool = False) -> Path:
         raise ValidationError(f"Absolute paths are not allowed: {path}")
 
     return path_obj.resolve()
+
+
+def update_manifest_file(
+    package_name: str, new_version: str, root_dir: Optional[Path] = None
+) -> List[Path]:
+    """Find and update package version in manifest files.
+
+    Args:
+        package_name: Name of the package to update.
+        new_version: New version string.
+        root_dir: Root directory to search for manifests.
+
+    Returns:
+        List[Path]: List of updated manifest files.
+    """
+    if root_dir is None:
+        root_dir = Path.cwd()
+
+    updated_files = []
+
+    # 1. Update requirements.txt files
+    for req_file in root_dir.glob("**/requirements*.txt"):
+        if _update_requirements_txt(req_file, package_name, new_version):
+            updated_files.append(req_file)
+
+    # 2. Update pyproject.toml
+    pyproject = root_dir / "pyproject.toml"
+    if pyproject.exists():
+        if _update_pyproject_toml(pyproject, package_name, new_version):
+            updated_files.append(pyproject)
+
+    return updated_files
+
+
+def _update_requirements_txt(file_path: Path, package_name: str, new_version: str) -> bool:
+    """Update package version in requirements.txt file."""
+    try:
+        content = file_path.read_text()
+        # Pattern to match package name with version specifier
+        # Handles: package==version, package>=version, package~=version
+        # Ignores whitespace and case
+        pattern = re.compile(
+            rf"^({re.escape(package_name)})\s*[=<>~]=?\s*([0-9a-zA-Z._+-]*)",
+            re.IGNORECASE | re.MULTILINE,
+        )
+
+        new_content, count = pattern.subn(rf"\1=={new_version}", content)
+
+        if count > 0:
+            file_path.write_text(new_content)
+            return True
+    except Exception:
+        pass
+    return False
+
+
+def _update_pyproject_toml(file_path: Path, package_name: str, new_version: str) -> bool:
+    """Update package version in pyproject.toml dependencies."""
+    try:
+        data = toml.load(file_path)
+        updated = False
+
+        # Check [project] dependencies (PEP 621)
+        if "project" in data and "dependencies" in data["project"]:
+            deps = data["project"]["dependencies"]
+            for i, dep in enumerate(deps):
+                # Simple parsing for "package>=version" or "package"
+                if dep.lower().startswith(package_name.lower()):
+                    # Use regex to replace version segment
+                    # Matches "name>=1.0.0" -> "name==new_version"
+                    pattern = re.compile(
+                        rf"^({re.escape(package_name)})(\s*[=<>~]=?.*)?$", re.IGNORECASE
+                    )
+                    if pattern.match(dep):
+                        deps[i] = f"{package_name}=={new_version}"
+                        updated = True
+
+        # Check [project.optional-dependencies]
+        if "project" in data and "optional-dependencies" in data["project"]:
+            for _, group_deps in data["project"]["optional-dependencies"].items():
+                for i, dep in enumerate(group_deps):
+                    if dep.lower().startswith(package_name.lower()):
+                        pattern = re.compile(
+                            rf"^({re.escape(package_name)})(\s*[=<>~]=?.*)?$", re.IGNORECASE
+                        )
+                        if pattern.match(dep):
+                            group_deps[i] = f"{package_name}=={new_version}"
+                            updated = True
+
+        if updated:
+            with open(file_path, "w") as f:
+                toml.dump(data, f)
+            return True
+    except Exception:
+        pass
+    return False

@@ -339,3 +339,37 @@ def check_package_exists(package_name: str) -> bool:
     result = run_secure_command(command)
 
     return result.returncode == 0
+
+
+def get_dependency_graph() -> Dict[str, List[str]]:
+    """Get dependency graph of installed packages.
+
+    Returns:
+        Dict[str, List[str]]: Mapping of package name to list of its dependencies.
+    """
+    logger.debug("Retrieving dependency graph...")
+
+    try:
+        # Try to use pipdeptree if available
+        command = ["pipdeptree", "--json-tree"]
+        result = run_secure_command(command)
+
+        if result.returncode == 0:
+            data = json.loads(result.stdout)
+            graph = {}
+
+            def walk(node):
+                name = node["package_name"].lower()
+                deps = [d["package_name"].lower() for d in node.get("dependencies", [])]
+                graph[name] = deps
+                for d in node.get("dependencies", []):
+                    walk(d)
+
+            for item in data:
+                walk(item)
+            return graph
+    except Exception as e:
+        logger.debug(f"Failed to get dependency graph via pipdeptree: {e}")
+
+    # Fallback: empty graph (no sorting)
+    return {}
