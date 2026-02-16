@@ -41,8 +41,19 @@ else
     exit 1
 fi
 
+# Update version in pyproject.toml
+sed -i "s/^version = \".*\"/version = \"$VERSION\"/" pyproject.toml
+
+# Verify pyproject.toml change
+if grep -q "version = \"$VERSION\"" pyproject.toml; then
+    echo "Updated pyproject.toml to $VERSION"
+else
+    echo "Error: Failed to update version in pyproject.toml"
+    exit 1
+fi
+
 # Commit
-git add covert/__init__.py
+git add covert/__init__.py pyproject.toml
 git commit -m "chore(release): v$VERSION"
 
 # Tag
