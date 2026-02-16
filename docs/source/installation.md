@@ -29,13 +29,13 @@ Covert supports the following Python versions:
 The easiest way to install Covert:
 
 ```bash
-pip install covert-updater
+pip install covert-up
 ```
 
 To upgrade to the latest version:
 
 ```bash
-pip install --upgrade covert-updater
+pip install --upgrade covert-up
 ```
 
 ### Method 2: Install with Extra Dependencies
@@ -43,7 +43,7 @@ pip install --upgrade covert-updater
 #### Install with Development Dependencies
 
 ```bash
-pip install covert-updater[dev]
+pip install covert-up[dev]
 ```
 
 This includes:
@@ -58,7 +58,7 @@ This includes:
 #### Install with Documentation Dependencies
 
 ```bash
-pip install covert-updater[docs]
+pip install covert-up[docs]
 ```
 
 This includes:
@@ -69,7 +69,7 @@ This includes:
 #### Install with Security Dependencies
 
 ```bash
-pip install covert-updater[security]
+pip install covert-up[security]
 ```
 
 This includes:
@@ -79,7 +79,7 @@ This includes:
 #### Install All Extras
 
 ```bash
-pip install covert-updater[dev,docs,security]
+pip install covert-up[dev,docs,security]
 ```
 
 ### Method 3: Install from Source
@@ -108,19 +108,19 @@ source venv/bin/activate
 venv\Scripts\activate
 
 # Install Covert
-pip install covert-updater
+pip install covert-up
 ```
 
 #### Using Poetry
 
 ```bash
-poetry add covert-updater
+poetry add covert-up
 ```
 
 #### Using Pipenv
 
 ```bash
-pipenv install covert-updater
+pipenv install covert-up
 ```
 
 ## Verifying Installation
@@ -180,8 +180,8 @@ If the `covert` command is not found after installation, try:
 
 ```bash
 # Reinstall
-pip uninstall covert-updater
-pip install covert-updater
+pip uninstall covert-up
+pip install covert-up
 
 # Or use Python module syntax
 python -m covert --version
@@ -193,12 +193,12 @@ If you encounter permission errors:
 
 ```bash
 # Use --user flag
-pip install --user covert-updater
+pip install --user covert-up
 
 # Or use a virtual environment (recommended)
 python -m venv venv
 source venv/bin/activate
-pip install covert-updater
+pip install covert-up
 ```
 
 ### Python Version Mismatch
@@ -210,7 +210,7 @@ Ensure you're using the correct Python version:
 python --version
 
 # If needed, specify Python version
-python3.11 -m pip install covert-updater
+python3.11 -m pip install covert-up
 ```
 
 ## Uninstallation
@@ -218,7 +218,7 @@ python3.11 -m pip install covert-updater
 To uninstall Covert:
 
 ```bash
-pip uninstall covert-updater
+pip uninstall covert-up
 ```
 
 If you installed from source and want to completely remove it:

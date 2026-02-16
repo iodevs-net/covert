@@ -3,7 +3,7 @@ requires = ["setuptools>=68.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "covert-updater"
+name = "covert-up"
 version = "1.0.0"
 description = "Safe package updater for Python/Django projects"
 readme = "README.md"

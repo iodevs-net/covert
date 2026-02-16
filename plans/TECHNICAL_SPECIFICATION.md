@@ -703,7 +703,7 @@ requires = ["setuptools>=68.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "covert-updater"
+name = "covert-up"
 version = "0.1.0"
 description = "Safe package updater for Python/Django projects"
 readme = "README.md"
@@ -1163,7 +1163,7 @@ security = [
 ## 13. Success Criteria
 
 ### 13.1 Technical Criteria
-- [ ] Package installable via `pip install covert-updater`
+- [ ] Package installable via `pip install covert-up`
 - [ ] All security vulnerabilities addressed (no `shell=True`)
 - [ ] Test coverage >90%
 - [ ] All tests pass on Python 3.8, 3.9, 3.10, 3.11, 3.12

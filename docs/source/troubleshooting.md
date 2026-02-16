@@ -143,10 +143,10 @@ bash: covert: command not found
 **Solution:**
 ```bash
 # Install Covert
-pip install covert-updater
+pip install covert-up
 
 # Verify installation
-pip show covert-updater
+pip show covert-up
 
 # Or use Python module syntax
 python -m covert --version
@@ -167,7 +167,7 @@ ERROR: Could not find a version that satisfies the requirement...
 python --version
 
 # Ensure using correct pip
-python -m pip install covert-updater
+python -m pip install covert-up
 ```
 
 ### Backup Errors

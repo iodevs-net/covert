@@ -715,7 +715,7 @@ The codebase should use English throughout for consistency with Python ecosystem
 
 #### Technical Criteria
 
-- [ ] Package installable via `pip install covert-updater`
+- [ ] Package installable via `pip install covert-up`
 - [ ] All security vulnerabilities addressed (no `shell=True`)
 - [ ] Test coverage >90%
 - [ ] All tests pass on Python 3.8, 3.9, 3.10, 3.11, 3.12

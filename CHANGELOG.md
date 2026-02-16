@@ -119,7 +119,7 @@ Covert provides similar functionality but with additional safety features:
 To migrate, simply:
 
 ```bash
-pip install covert-updater
+pip install covert-up
 dry-run  # Preview
 covert --covert            # Run actual updates
 ```

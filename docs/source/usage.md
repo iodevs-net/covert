@@ -118,7 +118,7 @@ jobs:
           python-version: '3.11'
       
       - name: Install Covert
-        run: pip install covert-updater
+        run: pip install covert-up
       
       - name: Run Covert
         run: |
@@ -142,7 +142,7 @@ jobs:
 update-dependencies:
   image: python:3.11-slim
   script:
-    - pip install covert-updater
+    - pip install covert-up
     - covert --dry-run
   only:
     - schedule
@@ -162,7 +162,7 @@ jobs:
       - checkout
       - run:
           name: Install Covert
-          command: pip install covert-updater
+          command: pip install covert-up
       - run:
           name: Update Dependencies
           command: covert --dry-run

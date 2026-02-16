@@ -1,8 +1,8 @@
 # Covert - Safe Package Updater
 
-[![PyPI version](https://img.shields.io/pypi/v/covert-updater.svg)](https://pypi.org/project/covert-updater/)
-[![License](https://img.shields.io/pypi/l/covert-updater.svg)](https://pypi.org/project/covert-updater/)
-[![Python versions](https://img.shields.io/pypi/pyversions/covert-updater.svg)](https://pypi.org/project/covert-updater/)
+[![PyPI version](https://img.shields.io/pypi/v/covert-up.svg)](https://pypi.org/project/covert-up/)
+[![License](https://img.shields.io/pypi/l/covert-up.svg)](https://pypi.org/project/covert-up/)
+[![Python versions](https://img.shields.io/pypi/pyversions/covert-up.svg)](https://pypi.org/project/covert-up/)
 [![Test Status](https://github.com/iodevs-net/covert/actions/workflows/ci.yml/badge.svg)](https://github.com/iodevs-net/covert/actions/workflows/ci.yml)
 [![Coverage](https://img.shields.io/codecov/c/github/iodevs-net/covert.svg)](https://codecov.io/gh/iodevs-net/covert)
 [![Documentation Status](https://readthedocs.org/projects/covert/badge/?version=latest)](https://covert.readthedocs.io/)
@@ -32,7 +32,7 @@ Covert is a safe package updater tool for Python/Django projects that automatica
 ### Install from PyPI (Recommended)
 
 ```bash
-pip install covert-updater
+pip install covert-up
 ```
 
 ### Install from Source
@@ -310,7 +310,7 @@ jobs:
           python-version: '3.11'
       
       - name: Install Covert
-        run: pip install covert-updater
+        run: pip install covert-up
       
       - name: Run Covert
         run: covert --dry-run
@@ -420,4 +420,4 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - [Documentation](https://covert.readthedocs.io/)
 - [GitHub Repository](https://github.com/iodevs-net/covert)
 - [Issue Tracker](https://github.com/iodevs-net/covert/issues)
-- [PyPI Package](https://pypi.org/project/covert-updater/)
+- [PyPI Package](https://pypi.org/project/covert-up/)

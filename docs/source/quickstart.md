@@ -15,7 +15,7 @@ Before you begin, ensure you have:
 Install Covert using pip:
 
 ```bash
-pip install covert-updater
+pip install covert-up
 ```
 
 Or install from source:

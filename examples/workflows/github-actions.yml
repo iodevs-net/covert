@@ -24,7 +24,7 @@ jobs:
       - name: Install Covert
         run: |
           python -m pip install --upgrade pip
-          pip install covert-updater
+          pip install covert-up
 
       - name: Check for outdated packages
         run: |
