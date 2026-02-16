@@ -1,0 +1,61 @@
+# GitHub Actions workflow for Covert updates
+# Save this as .github/workflows/update-dependencies.yml
+
+name: Update Dependencies
+
+on:
+  schedule:
+    - cron: '0 0 * * 0'  # Weekly on Sunday at midnight
+  workflow_dispatch:  # Allow manual triggering
+
+jobs:
+  update-dependencies:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Covert
+        run: |
+          python -m pip install --upgrade pip
+          pip install covert-updater
+
+      - name: Check for outdated packages
+        run: |
+          covert --dry-run
+
+      - name: Update dependencies
+        if: github.event_name == 'schedule'
+        run: |
+          covert
+
+      - name: Create Pull Request
+        if: github.event_name == 'schedule'
+        uses: peter-evans/create-pull-request@v6
+        with:
+          commit-message: 'chore: Update dependencies'
+          title: 'Update Dependencies'
+          body: |
+            Automated dependency updates by Covert.
+            
+            Run dry-run output:
+            ```
+            $ covert --dry-run
+            ```
+            
+            This PR was created automatically.
+          branch: dependency-updates
+          delete-branch: true
+
+      - name: Upload logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: covert-logs
+          path: covert.log

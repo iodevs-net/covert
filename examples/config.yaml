@@ -1,0 +1,42 @@
+# Example Covert configuration file (YAML format)
+
+project:
+  name: "My Django Project"
+  python_version: "3.11"
+
+testing:
+  enabled: true
+  command: "pytest"
+  args:
+    - "-v"
+    - "--tb=short"
+  exclude_paths:
+    - "tests/e2e"
+    - "soporte/tests/e2e"
+  timeout_seconds: 300
+
+updates:
+  strategy: "sequential"  # sequential, parallel
+  max_parallel: 3
+  version_policy: "safe"  # safe, latest, minor, patch
+  ignore_packages:
+    - "package-to-ignore"
+    - "another-package"
+  allow_only_packages: null
+
+backup:
+  enabled: true
+  location: "./backups"
+  retention_days: 30
+  format: "txt"  # txt, json
+
+logging:
+  level: "INFO"  # DEBUG, INFO, WARNING, ERROR, CRITICAL
+  format: "detailed"  # simple, detailed, json
+  file: "covert.log"
+  console: true
+
+security:
+  require_virtualenv: true
+  verify_signatures: false
+  check_vulnerabilities: true

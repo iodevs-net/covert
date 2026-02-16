@@ -1,0 +1,163 @@
+# Covert Project - Security Scanning Workflow
+# Runs on schedule and manual triggers
+
+name: Security
+
+on:
+  schedule:
+    # Run security scans weekly on Sunday at 00:00 UTC
+    - cron: '0 0 * * 0'
+  workflow_dispatch:
+  push:
+    branches: [main, master]
+    paths:
+      - '**.py'
+      - 'pyproject.toml'
+      - 'requirements*.txt'
+
+# Set permissions for the workflow
+permissions:
+  contents: read
+  security-events: write
+  actions: read
+
+jobs:
+  # ==========================================
+  # Dependency Vulnerability Scanning
+  # ==========================================
+  dependency-scan:
+    name: Dependency Scan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev,security]"
+
+      - name: Run pip-audit
+        id: pip-audit
+        run: pip-audit --format=json > pip-audit.json
+        continue-on-error: true
+
+      - name: Upload pip-audit results to GitHub Security
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: pip-audit.json
+          category: pip-audit
+
+      - name: Run safety check
+        id: safety
+        run: safety check --json > safety.json
+        continue-on-error: true
+
+      - name: Upload safety results to GitHub Security
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: safety.json
+          category: safety
+
+      - name: Fail if vulnerabilities found
+        run: |
+          if grep -q "Vulnerabilities found" pip-audit.json 2>/dev/null || [ -s safety.json ]; then
+            echo "::warning::Security vulnerabilities detected!"
+            exit 1
+          fi
+
+  # ==========================================
+  # Code Scanning with CodeQL
+  # ==========================================
+  codeql:
+    name: CodeQL
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write
+      contents: read
+      actions: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: Python
+          queries: security-extended
+
+      - name: Autobuild
+        uses: github/codeql-action/autobuild@v3
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: "/language:python"
+
+  # ==========================================
+  # Secret Scanning
+  # ==========================================
+  secret-scan:
+    name: Secret Scanning
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Run GitLeaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_CONFIG_PATH: .gitleaks.toml
+
+  # ==========================================
+  # Container Scanning (if Dockerfile exists)
+  # ==========================================
+  container-scan:
+    name: Container Scan
+    runs-on: ubuntu-latest
+    if: hashFiles('Dockerfile') != ''
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Build Docker image
+        run: |
+          docker build -t covert:latest .
+
+      - name: Run Trivy scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: 'image'
+          scan-ref: 'covert:latest'
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+
+      - name: Upload Trivy results to GitHub Security
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: trivy-results.sarif
+          category: trivy
+
+  # ==========================================
+  # Dependency Review
+  # ==========================================
+  dependency-review:
+    name: Dependency Review
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Dependency Review Action
+        uses: actions/dependency-review-action@v4
+        with:
+          fail-on-severity: high
+          allow-dependencies-licenses: MIT
