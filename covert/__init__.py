@@ -10,7 +10,7 @@ the following core capabilities:
 - Support dry-run mode for simulation without actual changes
 """
 
-__version__ = "1.2.1"
+__version__ = "1.2.2"
 __author__ = "iodevs-net"
 __license__ = "MIT"
 
