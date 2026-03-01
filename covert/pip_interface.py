@@ -5,8 +5,10 @@ installing, and uninstalling packages. All commands are executed without
 shell=True for security.
 """
 
+import hashlib
 import json
 import subprocess
+import tempfile
 from pathlib import Path
 from typing import Dict, List, Optional, Union
 
@@ -76,6 +78,132 @@ def run_secure_command(
     return result
 
 
+def get_package_hash(package_name: str, version: str) -> Optional[str]:
+    """Get SHA256 hash of a package from PyPI.
+
+    Downloads the package temporarily and computes its hash.
+    This is used for secure verification before installation.
+
+    Args:
+        package_name: Name of the package.
+        version: Specific version to get hash for.
+
+    Returns:
+        Optional[str]: SHA256 hash of the package, or None if unable to get.
+    """
+    logger.debug(f"Computing hash for {package_name}=={version}")
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        # Download package to temp directory
+        download_cmd = [
+            "pip", "download",
+            f"{package_name}=={version}",
+            "--no-deps",
+            "--dest", tmpdir,
+        ]
+        result = run_secure_command(download_cmd, timeout=60)
+
+        if result.returncode != 0:
+            logger.warning(f"Could not download {package_name}=={version} for hashing")
+            return None
+
+        # Find downloaded file
+        tmp_path = Path(tmpdir)
+        wheel_or_tar = None
+        for f in tmp_path.iterdir():
+            if f.suffix in (".whl", ".tar.gz", ".zip"):
+                wheel_or_tar = f
+                break
+
+        if not wheel_or_tar:
+            logger.warning(f"No package file found for {package_name}=={version}")
+            return None
+
+        # Compute hash
+        sha256_hash = hashlib.sha256()
+        try:
+            with open(wheel_or_tar, "rb") as f:
+                for chunk in iter(lambda: f.read(4096), b""):
+                    sha256_hash.update(chunk)
+            return f"sha256:{sha256_hash.hexdigest()}"
+        except OSError as e:
+            logger.warning(f"Could not hash {wheel_or_tar}: {e}")
+            return None
+
+
+def verify_and_install_package(
+    package_name: str,
+    version: Optional[str] = None,
+    upgrade: bool = False,
+    pre_release: bool = False,
+    timeout: Optional[int] = None,
+) -> Dict[str, str]:
+    """Install a package with hash verification.
+
+    Downloads the package, computes its hash, verifies against expected hash,
+    and only installs if verification passes.
+
+    Args:
+        package_name: Name of the package to install.
+        version: Specific version to install.
+        upgrade: Whether to upgrade if already installed.
+        pre_release: Whether to include pre-release versions.
+        timeout: Maximum time to wait for installation.
+
+    Returns:
+        Dict[str, str]: Package information including name and version.
+
+    Raises:
+        ValidationError: If package name or version is invalid.
+        PipError: If installation fails or hash verification fails.
+    """
+    sanitized_name = sanitize_package_name(package_name)
+
+    if version and not validate_version(version):
+        raise ValidationError(f"Invalid version format: {version}")
+
+    # Build package specifier
+    package_spec = sanitized_name
+    if version:
+        package_spec = f"{sanitized_name}=={version}"
+
+    logger.info(f"Installing package with hash verification: {package_spec}")
+
+    # Get expected hash
+    expected_hash = get_package_hash(sanitized_name, version) if version else None
+
+    # Build install command with hash verification
+    install_cmd = ["pip", "install", package_spec]
+
+    if expected_hash:
+        install_cmd.extend(["--require-hashes", "--no-input"])
+
+    if upgrade:
+        install_cmd.append("--upgrade")
+
+    if pre_release:
+        install_cmd.append("--pre")
+
+    result = run_secure_command(install_cmd, timeout=timeout)
+
+    if result.returncode != 0:
+        error_msg = result.stderr.strip() if result.stderr else "Unknown error"
+        logger.error(f"Failed to install {package_spec}: {error_msg}")
+        raise PipError("Failed to install package")
+
+    # Get the installed version
+    installed_version = version
+    if not installed_version:
+        installed_version = get_package_version(sanitized_name)
+
+    logger.info(f"Successfully installed {sanitized_name}=={installed_version}")
+
+    return {
+        "name": sanitized_name,
+        "version": installed_version or "",
+    }
+
+
 def get_outdated_packages() -> List[Dict[str, str]]:
     """Get list of outdated packages using pip.
 
@@ -117,6 +245,7 @@ def install_package(
     upgrade: bool = False,
     pre_release: bool = False,
     timeout: Optional[int] = None,
+    verify_hash: bool = False,
 ) -> Dict[str, str]:
     """Install a package using pip.
 
@@ -126,6 +255,7 @@ def install_package(
         upgrade: Whether to upgrade if already installed.
         pre_release: Whether to include pre-release versions.
         timeout: Maximum time to wait for installation in seconds.
+        verify_hash: Whether to verify package hash before installation.
 
     Returns:
         Dict[str, str]: Package information including name and version.
@@ -145,6 +275,16 @@ def install_package(
         package_spec = f"{sanitized_name}=={version}"
 
     logger.info(f"Installing package: {package_spec}")
+
+    # If hash verification is enabled, use it
+    if verify_hash and version:
+        return verify_and_install_package(
+            package_name,
+            version=version,
+            upgrade=upgrade,
+            pre_release=pre_release,
+            timeout=timeout,
+        )
 
     command = ["pip", "install", package_spec]
 

@@ -399,9 +399,10 @@ def _update_package(
         # Store current version for rollback
         old_version = package.current_version
 
-        # Install new version
+        # Install new version (with hash verification if enabled)
+        verify_hash = getattr(config.security, 'verify_hashes', False)
         logger.info(f"Installing {package.name}=={package.latest_version}")
-        install_package(package.name, version=package.latest_version)
+        install_package(package.name, version=package.latest_version, verify_hash=verify_hash)
         logger.info(f"Successfully installed {package.name}=={package.latest_version}")
 
         # Run tests if enabled
