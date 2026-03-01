@@ -24,6 +24,9 @@ class GitConfig:
     commit: bool = False
     create_pr: bool = False
     commit_message: str = "chore: update dependencies"
+    auto_merge: bool = False
+    auto_merge_method: str = "squash"
+    required_checks: Optional[List[str]] = None
 
 
 class GitError(Exception):
@@ -309,6 +312,10 @@ Please ensure all tests pass before merging.
 
                     if pr_url:
                         logger.info(f"Pull Request created: {pr_url}")
+
+                        # Auto-merge if requested
+                        if config.auto_merge:
+                            auto_merge_pr(pr_url, config.auto_merge_method, config.required_checks)
                 else:
                     logger.warning("Remote is not GitHub. Cannot create PR automatically.")
                     logger.info("Push your branch manually and create a PR.")
@@ -324,3 +331,103 @@ Please ensure all tests pass before merging.
             logger.info(f"Changes committed: {commit_sha}")
 
     return pr_url
+
+
+def auto_merge_pr(
+    pr_url: str,
+    merge_method: str = "squash",
+    required_checks: Optional[List[str]] = None,
+) -> bool:
+    """Auto-merge a pull request when checks pass (Dependabot style).
+
+    Args:
+        pr_url: URL of the pull request.
+        merge_method: Merge method (squash, merge, rebase).
+        required_checks: List of required checks that must pass.
+
+    Returns:
+        True if merge was successful or waiting for checks.
+    """
+    import time
+
+    # Check if gh CLI is available
+    try:
+        subprocess.run(
+            ["gh", "--version"],
+            capture_output=True,
+            check=True,
+            shell=False,
+        )
+    except (FileNotFoundError, subprocess.CalledProcessError):
+        logger.warning("GitHub CLI (gh) not found. Cannot auto-merge.")
+        return False
+
+    # Extract PR number from URL
+    # URL format: https://github.com/owner/repo/pull/123
+    pr_number = pr_url.split("/")[-1]
+
+    try:
+        # Wait for PR checks to pass
+        if required_checks:
+            logger.info(f"Waiting for required checks: {', '.join(required_checks)}")
+            max_wait = 300  # 5 minutes max
+            wait_interval = 10  # Check every 10 seconds
+
+            for _ in range(max_wait // wait_interval):
+                # Get PR status
+                result = subprocess.run(
+                    ["gh", "pr", "view", pr_number, "--json", "statusCheckRollup"],
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                    shell=False,
+                )
+
+                if result.returncode == 0:
+                    import json
+
+                    data = json.loads(result.stdout)
+                    checks = data.get("statusCheckRollup", [])
+
+                    # Check if all required checks passed
+                    all_passed = True
+                    for required in required_checks:
+                        check_found = False
+                        for check in checks:
+                            if required.lower() in check.get("name", "").lower():
+                                check_found = True
+                                if check.get("conclusion") != "SUCCESS":
+                                    all_passed = False
+                                    break
+                        if not check_found:
+                            all_passed = False
+
+                    if all_passed:
+                        logger.info("All required checks passed!")
+                        break
+                    else:
+                        logger.info("Checks still running, waiting...")
+                        time.sleep(wait_interval)
+                else:
+                    time.sleep(wait_interval)
+
+        # Merge the PR
+        logger.info(f"Merging PR #{pr_number} using {merge_method} merge...")
+        result = subprocess.run(
+            ["gh", "pr", "merge", pr_number, f"--{merge_method}", "--auto"],
+            capture_output=True,
+            text=True,
+            check=False,
+            shell=False,
+        )
+
+        if result.returncode == 0:
+            logger.info(f"PR #{pr_number} merged successfully!")
+            return True
+        else:
+            logger.error(f"Failed to merge PR: {result.stderr}")
+            return False
+
+    except Exception as e:
+        logger.error(f"Error during auto-merge: {e}")
+        return False

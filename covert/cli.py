@@ -202,6 +202,64 @@ def parse_args(args: Optional[List[str]] = None) -> argparse.Namespace:
         help="Disable progress bars",
     )
 
+    # pip-sync style operations
+    sync_group = parser.add_argument_group("pip-sync style operations")
+    sync_group.add_argument(
+        "--sync",
+        action="store_true",
+        help="Sync environment to match requirements file (pip-sync style)",
+    )
+    sync_group.add_argument(
+        "--requirements",
+        type=str,
+        metavar="FILE",
+        help="Requirements file(s) to sync (can be specified multiple times)",
+        action="append",
+    )
+    sync_group.add_argument(
+        "--constraints",
+        type=str,
+        metavar="FILE",
+        help="Constraints file to use (like pip-compile -c)",
+    )
+    sync_group.add_argument(
+        "--dont-upgrade",
+        type=str,
+        metavar="PACKAGE",
+        help="Package to never upgrade (can be used multiple times)",
+        action="append",
+    )
+    sync_group.add_argument(
+        "--dont-sync",
+        type=str,
+        metavar="PACKAGE",
+        help="Package to never sync/uninstall (can be used multiple times)",
+        action="append",
+    )
+
+    # Auto-merge (Dependabot style)
+    automerge_group = parser.add_argument_group("Auto-merge (Dependabot style)")
+    automerge_group.add_argument(
+        "--auto-merge",
+        action="store_true",
+        help="Auto-merge PR when checks pass (requires --pr)",
+    )
+    automerge_group.add_argument(
+        "--auto-merge-method",
+        type=str,
+        choices=["squash", "merge", "rebase"],
+        default="squash",
+        metavar="METHOD",
+        help="Merge method for auto-merge (default: squash)",
+    )
+    automerge_group.add_argument(
+        "--required-checks",
+        type=str,
+        metavar="CHECK",
+        help="Required checks to pass before auto-merge",
+        action="append",
+    )
+
     return parser.parse_args(args)
 
 
@@ -468,6 +526,29 @@ def main(args: Optional[List[str]] = None) -> int:
 
         return EXIT_SUCCESS
 
+    # Handle pip-sync style operations
+    if parsed_args.sync:
+        from covert.lockfile import SyncConfig, sync_environment
+
+        requirements_files = parsed_args.requirements or ["requirements.txt"]
+
+        sync_config = SyncConfig(
+            requirements_files=requirements_files,
+            constraints_file=parsed_args.constraints,
+            dry_run=parsed_args.dry_run,
+            dont_upgrade=parsed_args.dont_upgrade or [],
+            dont_sync=parsed_args.dont_sync or [],
+        )
+
+        logger.info("Starting pip-sync style environment sync...")
+
+        success = sync_environment(requirements_files, sync_config)
+
+        if success:
+            return EXIT_SUCCESS
+        else:
+            return EXIT_ERROR
+
     # Parse ignore list
     ignore_packages = parse_ignore_list(parsed_args.ignore)
     if ignore_packages:
@@ -566,6 +647,9 @@ def main(args: Optional[List[str]] = None) -> int:
                 commit=parsed_args.commit,
                 create_pr=parsed_args.create_pr,
                 commit_message=f"chore: update {session.updated_count} dependencies via Covert",
+                auto_merge=parsed_args.auto_merge,
+                auto_merge_method=parsed_args.auto_merge_method,
+                required_checks=parsed_args.required_checks,
             )
 
             # Files to commit
@@ -577,6 +661,8 @@ def main(args: Optional[List[str]] = None) -> int:
                 pr_url = perform_git_actions(files_to_commit, git_config)
                 if pr_url:
                     print(f"\n✓ Pull Request created: {pr_url}")
+                    if parsed_args.auto_merge:
+                        print("✓ Auto-merge enabled - PR will be merged when checks pass")
             except Exception as e:
                 logger.warning(f"Git operations failed: {e}")
 

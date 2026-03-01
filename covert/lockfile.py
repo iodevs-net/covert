@@ -478,3 +478,280 @@ def find_input_files() -> Dict[str, Path]:
         inputs["requirements.in"] = req_in
 
     return inputs
+
+
+@dataclass
+class SyncConfig:
+    """Configuration for pip-sync style operations."""
+
+    requirements_files: List[str] = field(default_factory=list)
+    constraints_file: Optional[str] = None
+    dry_run: bool = False
+    force: bool = False  # Force installation even if already satisfied
+    dont_upgrade: List[str] = field(default_factory=list)  # Packages to never upgrade
+    dont_sync: List[str] = field(default_factory=list)  # Packages to never sync
+    pip_args: str = ""  # Additional pip arguments
+
+
+@dataclass
+class SyncAction:
+    """Represents a sync action to be performed."""
+
+    action_type: str  # "install", "upgrade", "uninstall"
+    package_name: str
+    old_version: Optional[str] = None
+    new_version: Optional[str] = None
+
+
+def get_installed_packages() -> Dict[str, str]:
+    """Get currently installed packages.
+
+    Returns:
+        Dictionary mapping package names to versions.
+    """
+    import subprocess
+
+    installed: Dict[str, str] = {}
+
+    try:
+        result = subprocess.run(
+            ["pip", "list", "--format=json"],
+            capture_output=True,
+            text=True,
+            shell=False,
+            timeout=30,
+        )
+
+        if result.returncode == 0:
+            import json
+
+            packages = json.loads(result.stdout)
+            for pkg in packages:
+                # Normalize name (lowercase, replace underscores with hyphens)
+                name = pkg["name"].lower().replace("_", "-")
+                installed[name] = pkg["version"]
+
+    except Exception as e:
+        logger.warning(f"Could not get installed packages: {e}")
+
+    return installed
+
+
+def parse_requirements_file(req_path: Path) -> Dict[str, str]:
+    """Parse a requirements.txt file.
+
+    Args:
+        req_path: Path to requirements.txt
+
+    Returns:
+        Dictionary mapping package names to versions.
+    """
+    packages: Dict[str, str] = {}
+
+    try:
+        with open(req_path) as f:
+            for line in f:
+                line = line.strip()
+
+                # Skip comments and empty lines
+                if not line or line.startswith("#"):
+                    continue
+
+                # Skip flags like --hash=sha256:...
+                if line.startswith("--"):
+                    continue
+
+                # Parse package==version
+                if "==" in line:
+                    # Handle extras like package[extra]==version
+                    name = line.split("==")[0].split("[")[0]
+                    version = line.split("==")[1].split(";")[0].strip()
+
+                    # Normalize name
+                    name = name.lower().replace("_", "-")
+
+                    packages[name] = version
+
+    except Exception as e:
+        logger.warning(f"Could not parse requirements file: {e}")
+
+    return packages
+
+
+def compute_sync_actions(
+    required: Dict[str, str],
+    installed: Dict[str, str],
+    config: SyncConfig,
+) -> List[SyncAction]:
+    """Compute actions needed to sync environment.
+
+    Args:
+        required: Required packages from lock file.
+        installed: Currently installed packages.
+        config: Sync configuration.
+
+    Returns:
+        List of actions to perform.
+    """
+    actions: List[SyncAction] = []
+
+    required_names = set(required.keys())
+    installed_names = set(installed.keys())
+
+    # Packages to install (in required but not installed)
+    for name in required_names - installed_names:
+        if name not in config.dont_sync:
+            actions.append(SyncAction(
+                action_type="install",
+                package_name=name,
+                new_version=required[name],
+            ))
+
+    # Packages to uninstall (installed but not in required)
+    for name in installed_names - required_names:
+        # Never uninstall pip, setuptools, wheel, or packages in dont_sync
+        if name not in ["pip", "setuptools", "wheel"] and name not in config.dont_sync:
+            actions.append(SyncAction(
+                action_type="uninstall",
+                package_name=name,
+                old_version=installed[name],
+            ))
+
+    # Packages to upgrade/downgrade
+    for name in required_names & installed_names:
+        if name in config.dont_upgrade or name in config.dont_sync:
+            continue
+
+        required_version = required[name]
+        installed_version = installed[name]
+
+        if required_version != installed_version:
+            actions.append(SyncAction(
+                action_type="upgrade",
+                package_name=name,
+                old_version=installed_version,
+                new_version=required_version,
+            ))
+
+    return actions
+
+
+def format_sync_actions(actions: List[SyncAction]) -> str:
+    """Format sync actions as human-readable text.
+
+    Args:
+        actions: List of sync actions.
+
+    Returns:
+        Formatted string.
+    """
+    if not actions:
+        return "Environment is already in sync."
+
+    lines = ["Sync Actions:", "=" * 40]
+
+    install_actions = [a for a in actions if a.action_type == "install"]
+    upgrade_actions = [a for a in actions if a.action_type == "upgrade"]
+    uninstall_actions = [a for a in actions if a.action_type == "uninstall"]
+
+    if install_actions:
+        lines.append(f"\nInstall ({len(install_actions)}):")
+        for action in install_actions:
+            lines.append(f"  + {action.package_name}=={action.new_version}")
+
+    if upgrade_actions:
+        lines.append(f"\nUpgrade ({len(upgrade_actions)}):")
+        for action in upgrade_actions:
+            lines.append(f"  ^ {action.package_name}: {action.old_version} -> {action.new_version}")
+
+    if uninstall_actions:
+        lines.append(f"\nUninstall ({len(uninstall_actions)}):")
+        for action in uninstall_actions:
+            lines.append(f"  - {action.package_name}=={action.old_version}")
+
+    return "\n".join(lines)
+
+
+def sync_environment(
+    requirements_files: List[str],
+    config: Optional[SyncConfig] = None,
+) -> bool:
+    """Sync environment to match requirements files (pip-sync style).
+
+    Args:
+        requirements_files: List of requirements.txt files to sync.
+        config: Sync configuration.
+
+    Returns:
+        True if sync was successful.
+    """
+    if config is None:
+        config = SyncConfig(requirements_files=requirements_files)
+
+    logger.info(f"Syncing environment with {len(requirements_files)} requirements file(s)")
+
+    # Parse all requirements files
+    required: Dict[str, str] = {}
+    for req_file in requirements_files:
+        req_path = Path(req_file)
+        if not req_path.exists():
+            logger.warning(f"Requirements file not found: {req_file}")
+            continue
+
+        packages = parse_requirements_file(req_path)
+        required.update(packages)
+        logger.debug(f"Loaded {len(packages)} packages from {req_file}")
+
+    if not required:
+        logger.error("No packages to sync")
+        return False
+
+    # Get currently installed packages
+    installed = get_installed_packages()
+    logger.debug(f"Found {len(installed)} installed packages")
+
+    # Compute actions
+    actions = compute_sync_actions(required, installed, config)
+
+    if not actions:
+        logger.info("Environment is already in sync with requirements")
+        return True
+
+    # Show what will happen
+    logger.info(format_sync_actions(actions))
+
+    if config.dry_run:
+        logger.info("Dry-run mode - no changes will be made")
+        return True
+
+    # Perform actions
+    from covert.pip_interface import install_package, uninstall_package
+
+    success = True
+
+    # First uninstall (to handle version conflicts)
+    for action in actions:
+        if action.action_type == "uninstall":
+            try:
+                logger.info(f"Uninstalling {action.package_name}")
+                uninstall_package(action.package_name)
+            except Exception as e:
+                logger.error(f"Failed to uninstall {action.package_name}: {e}")
+                success = False
+
+    # Then install/upgrade
+    for action in actions:
+        if action.action_type in ["install", "upgrade"]:
+            try:
+                logger.info(f"Installing {action.package_name}=={action.new_version}")
+                install_package(action.package_name, version=action.new_version)
+            except Exception as e:
+                logger.error(f"Failed to install {action.package_name}: {e}")
+                success = False
+
+    if success:
+        logger.info("Environment synced successfully")
+    else:
+        logger.error("Environment sync completed with errors")
+
+    return success
