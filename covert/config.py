@@ -126,6 +126,7 @@ class NotificationConfig:
         email_enabled: Whether email notifications are enabled.
         email_to: List of email recipients.
         webhook_url: Generic webhook URL for notifications.
+        channels: List of notification channels to use.
     """
 
     enabled: bool = False
@@ -134,6 +135,7 @@ class NotificationConfig:
     email_enabled: bool = False
     email_to: List[str] = field(default_factory=list)
     webhook_url: str = ""
+    channels: List[str] = field(default_factory=list)
 
 
 @dataclass

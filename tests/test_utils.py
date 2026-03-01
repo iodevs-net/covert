@@ -96,10 +96,12 @@ class TestSanitizePackageName:
     """Tests for sanitize_package_name function."""
 
     def test_sanitization(self):
-        """Test that package names are sanitized correctly."""
+        """Test that package names are sanitized correctly using canonicalize_name."""
+        # canonicalize_name normalizes according to PEP 503
         assert sanitize_package_name("MyPackage") == "mypackage"
         assert sanitize_package_name("MY-PACKAGE") == "my-package"
-        assert sanitize_package_name("my_package") == "my_package"
+        # underscores are converted to hyphens per PEP 503
+        assert sanitize_package_name("my_package") == "my-package"
 
     def test_invalid_name_raises_error(self):
         """Test that invalid package names raise ValidationError."""

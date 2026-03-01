@@ -143,10 +143,12 @@ class TestInputValidation:
 
     def test_sanitize_package_name_valid(self):
         """Test that valid package names are sanitized correctly."""
+        # canonicalize_name normalizes underscores to hyphens per PEP 503
         assert sanitize_package_name("Requests") == "requests"
         assert sanitize_package_name("MyPackage") == "mypackage"
         assert sanitize_package_name("valid-name") == "valid-name"
-        assert sanitize_package_name("valid_name") == "valid_name"
+        # underscores are converted to hyphens per PEP 503
+        assert sanitize_package_name("valid_name") == "valid-name"
 
     def test_sanitize_package_name_invalid_raises(self):
         """Test that invalid package names raise ValidationError."""

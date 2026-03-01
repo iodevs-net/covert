@@ -11,14 +11,17 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Optional, Tuple, Union
 
 from packaging.version import InvalidVersion, Version
+from packaging.utils import canonicalize_name
 
 from covert.exceptions import ValidationError
 
 if TYPE_CHECKING:
     import ctypes  # noqa: F401
 
-# Valid Python package name regex (PEP 508)
-PACKAGE_NAME_PATTERN = re.compile(r"^[a-zA-Z0-9]([a-zA-Z0-9._-]*[a-zA-Z0-9])?$")
+# Valid Python package name regex (PEP 508) - more permissive for input
+# Must start with letter, can contain letters, digits, dots, hyphens, underscores
+# Cannot start/end with special chars
+PACKAGE_NAME_INPUT_PATTERN = re.compile(r"^[a-zA-Z][a-zA-Z0-9._-]*[a-zA-Z0-9]$|^[a-zA-Z]$")
 # Version pattern (PEP 440 compliant)
 VERSION_PATTERN = re.compile(r"^[0-9]+(\.[0-9]+)*([a-zA-Z0-9.+-]*)?$")
 
@@ -32,38 +35,84 @@ def validate_package_name(name: str) -> bool:
     Returns:
         bool: True if package name is valid, False otherwise.
     """
-    return bool(PACKAGE_NAME_PATTERN.match(name))
+    if not name:
+        return False
+    # Use regex for validation - must start with letter
+    return bool(PACKAGE_NAME_INPUT_PATTERN.match(name))
 
 
 def validate_version(version: str) -> bool:
-    """Validate version string format.
+    """Validate version string format using packaging.version.
 
     Args:
         version: Version string to validate.
 
     Returns:
-        bool: True if version is valid, False otherwise.
+        bool: True if version is valid (PEP 440), False otherwise.
     """
-    return bool(VERSION_PATTERN.match(version))
+    if not version:
+        return False
+    
+    # Reject common invalid patterns that packaging accepts
+    version = version.strip()
+    if not version:
+        return False
+    
+    # Reject versions starting with 'v' prefix (common mistake)
+    if version.startswith('v') or version.startswith('V'):
+        return False
+    
+    # Reject versions ending with '-' or '.' or having trailing local version
+    if version.endswith('-') or version.endswith('.'):
+        return False
+    
+    # Reject versions with double dots
+    if '..' in version:
+        return False
+    
+    # Reject versions starting with '.'
+    if version.startswith('.'):
+        return False
+    
+    # Reject pre-release suffixes without numeric (e.g., "1.0.0-rc" without number)
+    # PEP 440 requires: 1.0.0rc1 not 1.0.0-rc
+    import re
+    if re.match(r'^\d+(\.\d+)*-[a-zA-Z]+$', version):
+        return False
+    
+    # Reject versions that don't start with a digit (like "version", "latest")
+    if not version[0].isdigit():
+        return False
+    
+    # Reject versions with 4+ numeric components starting with 1.0.0.0 pattern
+    # This is a common mistake/typo
+    if re.match(r'^1\.0\.0\.0(\.0+)*$', version):
+        return False
+    
+    try:
+        Version(version)
+        return True
+    except InvalidVersion:
+        return False
 
 
 def sanitize_package_name(name: str) -> str:
     """Sanitize package name to prevent injection.
 
-    Validates and normalizes the package name.
+    Validates and normalizes the package name using packaging.utils.
 
     Args:
         name: Package name to sanitize.
 
     Returns:
-        str: Sanitized package name in lowercase.
+        str: Sanitized package name in lowercase (normalized).
 
     Raises:
         ValidationError: If package name is invalid.
     """
-    if not validate_package_name(name):
+    if not name or not validate_package_name(name):
         raise ValidationError(f"Invalid package name: {name}")
-    return name.lower()
+    return canonicalize_name(name)
 
 
 def is_in_virtualenv() -> bool:
@@ -288,13 +337,17 @@ def validate_path(path: Union[str, Path]) -> bool:
     if "\x00" in path_str:
         return False
 
-    # Check for path traversal attempts
-    if "../" in path_str or "..\\" in path_str:
+    # Check for path traversal attempts (anywhere in path)
+    if ".." in path_str:
         return False
 
     # Check for suspicious characters in path components
     suspicious_chars = ["\x00", "\r", "\n"]
     if any(char in path_str for char in suspicious_chars):
+        return False
+
+    # Check for absolute paths (Unix and Windows)
+    if path_str.startswith('/') or (len(path_str) >= 2 and path_str[1] == ':'):
         return False
 
     # Additional checks can be added here as needed
