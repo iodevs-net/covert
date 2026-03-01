@@ -140,20 +140,65 @@ def get_venv_path() -> Optional[Path]:
 def check_elevated_privileges() -> bool:
     """Check if running with elevated privileges.
 
+    Multiple checks for comprehensive detection:
+    - Unix: UID 0, EUID 0, GID 0, EGID 0
+    - Windows: Admin privileges
+    - Environment: LOGNAME as root
+
     Returns:
         bool: True if running with elevated privileges (root/admin), False otherwise.
     """
+    # Unix root check (primary)
     try:
-        return os.geteuid() == 0  # Unix root check
+        if os.geteuid() == 0 or os.getuid() == 0:
+            return True
     except AttributeError:
-        # Windows - check if running as administrator
-        try:
-            import ctypes  # noqa: F401
+        pass
 
-            # Type ignore for Windows-specific code
-            return bool(ctypes.windll.shell32.IsUserAnAdmin() != 0)  # type: ignore[attr-defined, no-any-return]
-        except (AttributeError, OSError):
-            return False
+    # Unix group check
+    try:
+        if os.getegid() == 0 or os.getgid() == 0:
+            return True
+    except AttributeError:
+        pass
+
+    # Windows - check if running as administrator
+    try:
+        import ctypes  # noqa: F401
+
+        # Type ignore for Windows-specific code
+        return bool(ctypes.windll.shell32.IsUserAnAdmin() != 0)  # type: ignore[attr-defined, no-any-return]
+    except (AttributeError, OSError):
+        pass
+
+    # Check if we're effectively root via environment
+    if os.environ.get("USER") == "root" or os.environ.get("LOGNAME") == "root":
+        return True
+
+    return False
+
+
+def get_security_audit_info() -> dict:
+    """Get current security context information for auditing.
+
+    Returns:
+        dict with security-relevant information about the current execution context.
+    """
+    import platform
+
+    info = {
+        "running_in_venv": is_in_virtualenv(),
+        "elevated_privileges": check_elevated_privileges(),
+        "platform": platform.system(),
+        "python_uid": None,
+    }
+
+    try:
+        info["python_uid"] = os.getuid()
+    except AttributeError:
+        pass
+
+    return info
 
 
 def parse_version(version: str) -> Version:
@@ -377,3 +422,100 @@ def sanitize_path(path: Union[str, Path], allow_absolute: bool = False) -> Path:
         raise ValidationError(f"Absolute paths are not allowed: {path}")
 
     return path_obj.resolve()
+
+
+# Sensitive system directories that should never be modified
+SENSITIVE_DIRECTORIES = {
+    "/",
+    "/bin",
+    "/boot",
+    "/dev",
+    "/etc",
+    "/lib",
+    "/lib64",
+    "/proc",
+    "/root",
+    "/sbin",
+    "/sys",
+    "/usr",
+    "/var",
+    "/home",
+    "~",
+    ".",
+    "..",
+}
+
+
+def validate_backup_path(path: Union[str, Path], base_dir: Optional[Union[str, Path]] = None) -> Path:
+    """Validate backup path to prevent path traversal and system directory access.
+
+    Args:
+        path: Path to validate.
+        base_dir: Base directory to restrict path to (optional).
+
+    Returns:
+        Path: Resolved path if valid.
+
+    Raises:
+        ValidationError: If path is unsafe.
+    """
+    path_obj = Path(path).resolve()
+
+    # Check for path traversal attempts
+    if ".." in str(path_obj):
+        raise ValidationError("Path traversal detected in backup path")
+
+    # If base_dir provided, ensure path is within it
+    if base_dir:
+        base_resolved = Path(base_dir).resolve()
+        try:
+            path_obj.relative_to(base_resolved)
+        except ValueError:
+            raise ValidationError(f"Path must be within base directory: {base_dir}")
+
+    # Check against sensitive directories
+    path_parts = path_obj.parts
+    for sensitive in SENSITIVE_DIRECTORIES:
+        if sensitive in path_parts or str(path_obj).startswith(sensitive):
+            # Allow project-relative paths like ./backups
+            if path_obj.is_relative_to(Path.cwd()):
+                continue
+            raise ValidationError(f"Cannot use sensitive directory for backup: {sensitive}")
+
+    return path_obj
+
+
+def is_safe_command(command: list) -> bool:
+    """Validate that a command doesn't contain dangerous arguments.
+
+    Args:
+        command: Command as list of arguments.
+
+    Returns:
+        bool: True if command appears safe.
+    """
+    if not command:
+        return False
+
+    # Dangerous patterns that should never appear in commands
+    dangerous_patterns = [
+        "&&",  # Command chaining
+        "||",  # OR chaining
+        "|",   # Pipe
+        ";",   # Command separator
+        ">",   # Output redirect
+        "<",   # Input redirect
+        "$",   # Variable expansion
+        "`",   # Command substitution
+        "$(",  # Command substitution
+        "\n",  # Newline injection
+        "\r",  # Carriage return injection
+    ]
+
+    for arg in command:
+        if isinstance(arg, str):
+            for pattern in dangerous_patterns:
+                if pattern in arg:
+                    return False
+
+    return True

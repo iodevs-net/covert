@@ -19,6 +19,7 @@ from covert.pip_interface import get_outdated_packages, install_package, uninsta
 from covert.tester import run_tests
 from covert.utils import (
     check_elevated_privileges,
+    get_security_audit_info,
     is_breaking_change,
     is_in_virtualenv,
 )
@@ -180,6 +181,14 @@ def run_update_session(
     logger.info("Starting Covert update session")
     logger.info("=" * 60)
 
+    # Log security audit info at start of session
+    security_info = get_security_audit_info()
+    logger.info(
+        f"Security context: venv={security_info['running_in_venv']}, "
+        f"elevated={security_info['elevated_privileges']}, "
+        f"platform={security_info['platform']}"
+    )
+
     try:
         # Step 1: Check virtual environment (for programmatic usage)
         # CLI handles this with proper exit code, but we check here too
@@ -193,7 +202,14 @@ def run_update_session(
 
         # Step 2: Check for elevated privileges (for programmatic usage)
         if check_elevated_privileges():
-            logger.warning("Running with elevated privileges - this is not recommended")
+            logger.warning(
+                "Running with elevated privileges - this is not recommended. "
+                "Operations will be blocked for safety."
+            )
+            raise SecurityError(
+                "Covert cannot run with elevated privileges (root/admin). "
+                "Please run as a regular user within a virtual environment."
+            )
 
         # Step 3: Pre-flight test
         if not no_tests and config.testing.enabled:
