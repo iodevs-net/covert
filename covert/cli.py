@@ -132,6 +132,65 @@ def parse_args(args: Optional[List[str]] = None) -> argparse.Namespace:
         metavar="PATH",
         help="Path to save report file",
     )
+
+    # Lock file generation (pip-tools style)
+    lockfile_group = parser.add_argument_group("Lock file generation (pip-tools style)")
+    lockfile_group.add_argument(
+        "--output-file",
+        "--lock-file",
+        type=str,
+        metavar="PATH",
+        help="Generate locked requirements.txt file (pip-tools style)",
+    )
+    lockfile_group.add_argument(
+        "--generate-hashes",
+        action="store_true",
+        help="Include package hashes in lock file (for security)",
+    )
+    lockfile_group.add_argument(
+        "--upgrade",
+        action="store_true",
+        help="Upgrade all packages to latest versions when generating lock file",
+    )
+    lockfile_group.add_argument(
+        "--upgrade-package",
+        action="append",
+        dest="upgrade_packages",
+        metavar="PACKAGE",
+        help="Upgrade specific package (can be used multiple times)",
+    )
+    lockfile_group.add_argument(
+        "--diff",
+        action="store_true",
+        help="Show diff of changes before applying (dry-run with details)",
+    )
+    lockfile_group.add_argument(
+        "--check",
+        action="store_true",
+        help="Check for updates without applying (like pip-compile --dry-run)",
+    )
+
+    # Git integration
+    git_group = parser.add_argument_group("Git integration")
+    git_group.add_argument(
+        "--create-branch",
+        type=str,
+        metavar="BRANCH",
+        help="Create a new branch for changes",
+    )
+    git_group.add_argument(
+        "--commit",
+        action="store_true",
+        help="Commit changes after update",
+    )
+    git_group.add_argument(
+        "--pr",
+        "--create-pr",
+        action="store_true",
+        dest="create_pr",
+        help="Create Pull Request after commit (requires --create-branch)",
+    )
+
     advanced_group.add_argument(
         "--interactive",
         action="store_true",
@@ -326,6 +385,89 @@ def main(args: Optional[List[str]] = None) -> int:
         if notify_channel not in config.notifications.channels:
             config.notifications.channels.append(notify_channel)
 
+    # Handle lock file generation (pip-tools style)
+    if parsed_args.output_file:
+        from covert.lockfile import (
+            LockFileConfig,
+            find_input_files,
+            format_diff_text,
+            generate_lock_file,
+            load_existing_lock_file,
+            parse_pyproject_dependencies,
+            parse_requirements_in,
+        )
+        from covert.pip_interface import get_outdated_packages
+
+        logger.info(f"Generating lock file: {parsed_args.output_file}")
+
+        # Find input files
+        input_files = find_input_files()
+        if not input_files:
+            logger.error("No input files found (pyproject.toml, setup.py, or requirements.in)")
+            return EXIT_ERROR
+
+        # Parse dependencies from input files
+        all_deps: List[str] = []
+        for input_type, input_path in input_files.items():
+            logger.info(f"Found {input_type}: {input_path}")
+            if input_type == "pyproject":
+                deps = parse_pyproject_dependencies(input_path)
+                all_deps.extend(deps)
+            elif input_type == "requirements.in":
+                deps = parse_requirements_in(input_path)
+                all_deps.extend(deps)
+            # setup.py parsing is more complex - skip for now
+
+        if not all_deps:
+            logger.error("No dependencies found in input files")
+            return EXIT_ERROR
+
+        logger.info(f"Found {len(all_deps)} dependencies to resolve")
+
+        # Get outdated packages
+        outdated = get_outdated_packages()
+
+        # Generate lock file config
+        lock_config = LockFileConfig(
+            output_file=parsed_args.output_file,
+            generate_hashes=parsed_args.generate_hashes,
+            upgrade=parsed_args.upgrade,
+            upgrade_packages=parsed_args.upgrade_packages or [],
+            dry_run=parsed_args.check,
+            annotate=True,
+        )
+
+        # Check for diff mode
+        if parsed_args.diff or parsed_args.check:
+            from pathlib import Path
+
+            existing = load_existing_lock_file(Path(parsed_args.output_file))
+
+            if existing:
+                from covert.lockfile import compute_diff
+
+                diff = compute_diff(existing, outdated)
+                diff_text = format_diff_text(diff)
+                print(diff_text)
+
+                if parsed_args.check:
+                    if diff.added or diff.removed or diff.upgraded or diff.downgraded:
+                        logger.info("Updates available")
+                        return 1  # Exit with code 1 if updates available
+                    else:
+                        logger.info("All packages up to date")
+                        return 0
+
+            if parsed_args.diff:
+                # Just show diff, don't generate
+                return EXIT_SUCCESS
+
+        # Generate lock file
+        generate_lock_file(outdated, parsed_args.output_file, lock_config)
+        logger.info(f"Lock file generated: {parsed_args.output_file}")
+
+        return EXIT_SUCCESS
+
     # Parse ignore list
     ignore_packages = parse_ignore_list(parsed_args.ignore)
     if ignore_packages:
@@ -414,6 +556,29 @@ def main(args: Optional[List[str]] = None) -> int:
                 duration=duration,
                 vulnerabilities=vulnerabilities_found,
             )
+
+        # Git integration: Create branch, commit, and PR
+        if (parsed_args.create_branch or parsed_args.commit or parsed_args.create_pr) and session and session.success:
+            from covert.git_integration import GitConfig, perform_git_actions
+
+            git_config = GitConfig(
+                branch=parsed_args.create_branch,
+                commit=parsed_args.commit,
+                create_pr=parsed_args.create_pr,
+                commit_message=f"chore: update {session.updated_count} dependencies via Covert",
+            )
+
+            # Files to commit
+            files_to_commit = ["requirements.txt", "requirements.lock"]
+            if config.backup.enabled and session.backup_file:
+                files_to_commit.append(session.backup_file)
+
+            try:
+                pr_url = perform_git_actions(files_to_commit, git_config)
+                if pr_url:
+                    print(f"\n✓ Pull Request created: {pr_url}")
+            except Exception as e:
+                logger.warning(f"Git operations failed: {e}")
 
         # Determine exit code based on session results
         if session.success:
