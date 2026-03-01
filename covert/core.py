@@ -24,6 +24,7 @@ from covert.pip_interface import (
 from covert.tester import run_tests
 from covert.utils import (
     check_elevated_privileges,
+    get_security_audit_info,
     is_breaking_change,
     is_in_virtualenv,
     update_manifest_file,
@@ -188,6 +189,14 @@ def run_update_session(
     logger.info("Starting Covert update session")
     logger.info("=" * 60)
 
+    # Log security audit info at start of session
+    security_info = get_security_audit_info()
+    logger.info(
+        f"Security context: venv={security_info['running_in_venv']}, "
+        f"elevated={security_info['elevated_privileges']}, "
+        f"platform={security_info['platform']}"
+    )
+
     try:
         # Step 1: Check virtual environment (for programmatic usage)
         # CLI handles this with proper exit code, but we check here too
@@ -201,7 +210,14 @@ def run_update_session(
 
         # Step 2: Check for elevated privileges (for programmatic usage)
         if check_elevated_privileges():
-            logger.warning("Running with elevated privileges - this is not recommended")
+            logger.warning(
+                "Running with elevated privileges - this is not recommended. "
+                "Operations will be blocked for safety."
+            )
+            raise SecurityError(
+                "Covert cannot run with elevated privileges (root/admin). "
+                "Please run as a regular user within a virtual environment."
+            )
 
         # Step 3: Pre-flight test
         if not no_tests and config.testing.enabled:
@@ -447,12 +463,30 @@ def _update_package(
             result.status = UpdateStatus.UPDATED
             return result
 
+        # Analyze dependency impact before installation
+        from covert.dependency_analyzer import analyze_package_impact
+
+        logger.info(f"Analyzing dependency impact for {package.name}=={package.latest_version}...")
+        impact = analyze_package_impact(package.name, package.latest_version)
+
+        if not impact["can_resolve"]:
+            logger.error(f"Cannot install {package.name}: {impact['resolution_error']}")
+            result.status = UpdateStatus.FAILED_INSTALL
+            result.error_message = f"Dependency resolution failed: {impact['resolution_error']}"
+            return result
+
+        if impact["current_deps_ok"]:
+            logger.info("Current dependencies: OK")
+        else:
+            logger.warning(f"Current environment has broken dependencies: {impact['current_broken']}")
+
         # Store current version for rollback
         old_version = package.current_version
 
-        # Install new version
+        # Install new version (with hash verification if enabled)
+        verify_hash = getattr(config.security, 'verify_hashes', False)
         logger.info(f"Installing {package.name}=={package.latest_version}")
-        install_package(package.name, version=package.latest_version)
+        install_package(package.name, version=package.latest_version, verify_hash=verify_hash)
         logger.info(f"Successfully installed {package.name}=={package.latest_version}")
 
         # Run tests if enabled

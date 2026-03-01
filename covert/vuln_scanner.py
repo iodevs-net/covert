@@ -145,6 +145,7 @@ class VulnerabilityScanner:
                 capture_output=True,
                 text=True,
                 check=False,
+                shell=False,  # Security: Never use shell=True
             )
 
             if result.returncode == 0:
@@ -170,6 +171,7 @@ class VulnerabilityScanner:
                 capture_output=True,
                 text=True,
                 check=False,
+                shell=False,  # Security: Never use shell=True
             )
 
             result.raw_output += f"\n--- pip-audit output ---\n{proc.stdout}"
@@ -225,6 +227,7 @@ class VulnerabilityScanner:
                 capture_output=True,
                 text=True,
                 check=False,
+                shell=False,  # Security: Never use shell=True
             )
 
             result.raw_output += f"\n--- safety output ---\n{proc.stdout}"

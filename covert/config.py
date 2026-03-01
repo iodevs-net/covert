@@ -107,11 +107,13 @@ class SecurityConfig:
     Attributes:
         require_virtualenv: Whether to require a virtual environment.
         verify_signatures: Whether to verify package signatures.
+        verify_hashes: Whether to verify package hashes before installation.
         check_vulnerabilities: Whether to check for known vulnerabilities.
     """
 
     require_virtualenv: bool = True
     verify_signatures: bool = False
+    verify_hashes: bool = False
     check_vulnerabilities: bool = True
 
 
@@ -126,6 +128,7 @@ class NotificationConfig:
         email_enabled: Whether email notifications are enabled.
         email_to: List of email recipients.
         webhook_url: Generic webhook URL for notifications.
+        channels: List of notification channels to use.
     """
 
     enabled: bool = False
@@ -134,6 +137,7 @@ class NotificationConfig:
     email_enabled: bool = False
     email_to: List[str] = field(default_factory=list)
     webhook_url: str = ""
+    channels: List[str] = field(default_factory=list)
 
 
 @dataclass

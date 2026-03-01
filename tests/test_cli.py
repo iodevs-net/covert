@@ -9,8 +9,32 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from covert.cli import load_configuration, main, parse_args, parse_ignore_list
-from covert.config import Config
+from covert.config import (
+    BackupConfig,
+    Config,
+    LoggingConfig,
+    NotificationConfig,
+    ProjectConfig,
+    ReportConfig,
+    SecurityConfig,
+    TestingConfig,
+    UpdatesConfig,
+)
 from covert.exceptions import ConfigError
+
+
+def create_test_config():
+    """Create a test Config object with all required attributes."""
+    return Config(
+        project=ProjectConfig(name="test", python_version="3.8"),
+        testing=TestingConfig(),
+        updates=UpdatesConfig(),
+        backup=BackupConfig(),
+        logging=LoggingConfig(),
+        security=SecurityConfig(require_virtualenv=False),
+        notifications=NotificationConfig(),
+        reports=ReportConfig(),
+    )
 
 
 class TestParseArgs:
@@ -145,7 +169,7 @@ class TestLoadConfiguration:
     @patch("covert.cli.load_config")
     def test_load_configuration_success(self, mock_load_config, sample_config):
         """Test successful configuration loading."""
-        mock_load_config.return_value = MagicMock(spec=Config)
+        mock_load_config.return_value = create_test_config()
 
         config = load_configuration(str(sample_config))
         assert config is not None
@@ -217,7 +241,7 @@ class TestMain:
         config_path = temp_dir / "covert.yaml"
         config_path.write_text("project:\n  name: Test\n  python_version: '3.11'\n")
 
-        mock_config = MagicMock(spec=Config)
+        mock_config = create_test_config()
         mock_load_config.return_value = mock_config
 
         mock_session = MagicMock()
@@ -238,7 +262,7 @@ class TestMain:
         mock_setup_logging,
     ):
         """Test dry-run mode."""
-        mock_config = MagicMock(spec=Config)
+        mock_config = create_test_config()
         mock_load_config.return_value = mock_config
 
         mock_session = MagicMock()
@@ -262,7 +286,7 @@ class TestMain:
         mock_setup_logging,
     ):
         """Test with ignore list."""
-        mock_config = MagicMock(spec=Config)
+        mock_config = create_test_config()
         mock_load_config.return_value = mock_config
 
         mock_session = MagicMock()
@@ -286,7 +310,7 @@ class TestMain:
         mock_setup_logging,
     ):
         """Test with --no-backup flag."""
-        mock_config = MagicMock(spec=Config)
+        mock_config = create_test_config()
         mock_load_config.return_value = mock_config
 
         mock_session = MagicMock()
@@ -310,7 +334,7 @@ class TestMain:
         mock_setup_logging,
     ):
         """Test with --no-tests flag."""
-        mock_config = MagicMock(spec=Config)
+        mock_config = create_test_config()
         mock_load_config.return_value = mock_config
 
         mock_session = MagicMock()
@@ -334,7 +358,7 @@ class TestMain:
         mock_setup_logging,
     ):
         """Test session with failures returns non-zero exit code."""
-        mock_config = MagicMock(spec=Config)
+        mock_config = create_test_config()
         mock_load_config.return_value = mock_config
 
         mock_session = MagicMock()
@@ -354,7 +378,7 @@ class TestMain:
         mock_setup_logging,
     ):
         """Test keyboard interrupt handling."""
-        mock_config = MagicMock(spec=Config)
+        mock_config = create_test_config()
         mock_load_config.return_value = mock_config
 
         mock_run_session.side_effect = KeyboardInterrupt()
@@ -372,7 +396,7 @@ class TestMain:
         mock_setup_logging,
     ):
         """Test CovertError handling."""
-        mock_config = MagicMock(spec=Config)
+        mock_config = create_test_config()
         mock_load_config.return_value = mock_config
 
         from covert.exceptions import UpdateError
@@ -392,7 +416,7 @@ class TestMain:
         mock_setup_logging,
     ):
         """Test unexpected error handling."""
-        mock_config = MagicMock(spec=Config)
+        mock_config = create_test_config()
         mock_load_config.return_value = mock_config
 
         mock_run_session.side_effect = RuntimeError("Unexpected error")
@@ -426,7 +450,7 @@ class TestMain:
         mock_setup_logging,
     ):
         """Test different verbosity levels."""
-        mock_config = MagicMock(spec=Config)
+        mock_config = create_test_config()
         mock_load_config.return_value = mock_config
 
         mock_session = MagicMock()
@@ -436,11 +460,12 @@ class TestMain:
         # Test -v
         exit_code = main(["-v"])
         assert exit_code == 0
-        call_kwargs = mock_setup_logging.call_args[1]
-        assert call_kwargs["verbose_level"] == 1
+        # Second argument is verbose_level (positional)
+        call_args = mock_setup_logging.call_args[0]
+        assert call_args[1] == 1
 
         # Test -vv
         exit_code = main(["-vv"])
         assert exit_code == 0
-        call_kwargs = mock_setup_logging.call_args[1]
-        assert call_kwargs["verbose_level"] == 2
+        call_args = mock_setup_logging.call_args[0]
+        assert call_args[1] == 2

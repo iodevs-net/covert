@@ -143,10 +143,12 @@ class TestInputValidation:
 
     def test_sanitize_package_name_valid(self):
         """Test that valid package names are sanitized correctly."""
+        # canonicalize_name normalizes underscores to hyphens per PEP 503
         assert sanitize_package_name("Requests") == "requests"
         assert sanitize_package_name("MyPackage") == "mypackage"
         assert sanitize_package_name("valid-name") == "valid-name"
-        assert sanitize_package_name("valid_name") == "valid_name"
+        # underscores are converted to hyphens per PEP 503
+        assert sanitize_package_name("valid_name") == "valid-name"
 
     def test_sanitize_package_name_invalid_raises(self):
         """Test that invalid package names raise ValidationError."""
@@ -304,3 +306,87 @@ class TestPathValidationEdgeCases:
         assert not validate_path("/etc/passwd")
         assert not validate_path("C:\\Windows\\System32")
         assert not validate_path("/usr/bin")
+
+
+class TestBackupPathValidation:
+    """Test backup path validation for security."""
+
+    def test_validate_backup_path_rejects_etc(self):
+        """Test that /etc is rejected as backup path."""
+        from covert.utils import validate_backup_path, ValidationError
+
+        with pytest.raises(ValidationError):
+            validate_backup_path("/etc/passwd")
+
+    def test_validate_backup_path_rejects_root(self):
+        """Test that / (root) is rejected as backup path."""
+        from covert.utils import validate_backup_path, ValidationError
+
+        with pytest.raises(ValidationError):
+            validate_backup_path("/")
+
+    def test_validate_backup_path_accepts_relative(self):
+        """Test that relative paths like ./backups are accepted."""
+        from covert.utils import validate_backup_path
+
+        # Should not raise
+        result = validate_backup_path("./backups")
+        assert result is not None
+
+    def test_validate_backup_path_accepts_subdirectory(self):
+        """Test that subdirectories within project are accepted."""
+        from covert.utils import validate_backup_path
+
+        result = validate_backup_path("backups/mybackups")
+        assert result is not None
+
+
+class TestSecurityAuditInfo:
+    """Test security audit information gathering."""
+
+    def test_get_security_audit_info_returns_dict(self):
+        """Test that security audit info returns a dictionary."""
+        from covert.utils import get_security_audit_info
+
+        info = get_security_audit_info()
+        assert isinstance(info, dict)
+        assert "running_in_venv" in info
+        assert "elevated_privileges" in info
+        assert "platform" in info
+
+    def test_get_security_audit_info_values(self):
+        """Test that security audit info contains expected values."""
+        from covert.utils import get_security_audit_info
+
+        info = get_security_audit_info()
+        assert isinstance(info["running_in_venv"], bool)
+        assert isinstance(info["elevated_privileges"], bool)
+        assert isinstance(info["platform"], str)
+
+
+class TestCommandSafetyValidation:
+    """Test command safety validation."""
+
+    def test_is_safe_command_valid(self):
+        """Test that valid commands are accepted."""
+        from covert.utils import is_safe_command
+
+        assert is_safe_command(["pip", "list"])
+        assert is_safe_command(["python", "-m", "pytest"])
+        assert is_safe_command(["git", "status"])
+
+    def test_is_safe_command_rejects_dangerous(self):
+        """Test that commands with dangerous patterns are rejected."""
+        from covert.utils import is_safe_command
+
+        assert not is_safe_command(["pip", "list && rm -rf /"])
+        assert not is_safe_command(["pip", "list | cat /etc/passwd"])
+        assert not is_safe_command(["python", "-c", "import os; os.system('evil')"])
+        assert not is_safe_command(["pip", "install --help > /etc/passwd"])
+
+    def test_is_safe_command_empty(self):
+        """Test that empty commands are rejected."""
+        from covert.utils import is_safe_command
+
+        assert not is_safe_command([])
+        assert not is_safe_command(None)

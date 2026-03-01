@@ -3,26 +3,28 @@ requires = ["setuptools>=68.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "covert-up"
-version = "1.2.2"
+name = "covert-updater"
+version = "0.1.0"
 description = "Safe package updater for Python/Django projects"
 readme = "README.md"
 requires-python = ">=3.8"
-license = "MIT"
-
-authors = [{ name = "iodevs-net", email = "contact@example.com" }]
+license = {text = "MIT"}
+authors = [
+    {name = "iodevs-net", email = "contact@example.com"}
+]
 keywords = [
     "dependencies",
     "updates",
     "security",
     "django",
     "testing",
-    "rollback",
+    "rollback"
 ]
 classifiers = [
-    "Development Status :: 5 - Production/Stable",
+    "Development Status :: 3 - Alpha",
     "Environment :: Console",
     "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.8",
@@ -34,12 +36,12 @@ classifiers = [
     "Topic :: System :: Software Distribution",
 ]
 dependencies = [
-    "rich>=13.0.0",
-    "toml",
-    "pyyaml",
-    "packaging",
-    "pipdeptree",
-    "safety>=3.0.0",
+    "pyyaml>=6.0",
+    "toml>=0.10.2",
+    "tomli>=2.0; python_version<'3.11'",
+    "rich>=13.0",
+    "packaging>=23.0",
+    "httpx>=0.24.0",
 ]
 
 [project.optional-dependencies]
@@ -52,8 +54,15 @@ dev = [
     "mypy>=1.0",
     "ruff>=0.1.0",
 ]
-docs = ["sphinx>=7.0", "sphinx-rtd-theme>=2.0", "myst-parser>=2.0"]
-security = ["pip-audit>=2.5", "safety>=2.3"]
+docs = [
+    "sphinx>=7.0",
+    "sphinx-rtd-theme>=2.0",
+    "myst-parser>=2.0",
+]
+security = [
+    "pip-audit>=2.5",
+    "safety>=2.3",
+]
 
 [project.scripts]
 covert = "covert.cli:main"

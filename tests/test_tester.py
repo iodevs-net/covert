@@ -128,24 +128,18 @@ class TestRunTests:
 class TestParseTestOutput:
     """Tests for _parse_test_output function."""
 
-    @patch("covert.tester._parse_test_output")
-    def test_pytest_output(self, mock_parse):
+    def test_pytest_output(self):
         """Test parsing pytest output."""
-        from covert.tester import TestResult
+        from covert.tester import _parse_test_output, TestResult
 
-        mock_parse.return_value = TestResult(
-            success=True,
-            exit_code=0,
-            output="5 passed in 0.5s",
-            duration=0.5,
-            passed=5,
-            failed=0,
-            skipped=0,
-            total=5,
-        )
+        output = "5 passed in 1.23s"
+        result = _parse_test_output(output, 0)
 
-        # This is tested indirectly through run_tests
-        assert mock_parse.called
+        assert result.success is True
+        assert result.passed == 5
+        assert result.failed == 0
+        assert result.total == 5
+        assert result.duration == 1.23
 
 
 class TestCheckTestCommandAvailable:

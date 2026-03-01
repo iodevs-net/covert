@@ -201,7 +201,8 @@ class TestInstallPackage:
 
         install_package("requests", upgrade=True)
 
-        call_args = mock_run.call_args[0][0]
+        # Check the first call (install), not the second (show version)
+        call_args = mock_run.call_args_list[0][0][0]
         assert "--upgrade" in call_args
 
     @patch("covert.pip_interface.run_secure_command")
@@ -215,7 +216,8 @@ class TestInstallPackage:
 
         install_package("requests", pre_release=True)
 
-        call_args = mock_run.call_args[0][0]
+        # Check the first call (install), not the second (show version)
+        call_args = mock_run.call_args_list[0][0][0]
         assert "--pre" in call_args
 
     @patch("covert.pip_interface.run_secure_command")

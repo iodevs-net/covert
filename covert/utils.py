@@ -8,18 +8,20 @@ import os
 import re
 import sys
 from pathlib import Path
-from typing import TYPE_CHECKING, List, Optional, Tuple, Union
+from typing import TYPE_CHECKING, Optional, Tuple, Union
 
-import toml
 from packaging.version import InvalidVersion, Version
+from packaging.utils import canonicalize_name
 
 from covert.exceptions import ValidationError
 
 if TYPE_CHECKING:
     import ctypes  # noqa: F401
 
-# Valid Python package name regex (PEP 508)
-PACKAGE_NAME_PATTERN = re.compile(r"^[a-zA-Z0-9]([a-zA-Z0-9._-]*[a-zA-Z0-9])?$")
+# Valid Python package name regex (PEP 508) - more permissive for input
+# Must start with letter, can contain letters, digits, dots, hyphens, underscores
+# Cannot start/end with special chars
+PACKAGE_NAME_INPUT_PATTERN = re.compile(r"^[a-zA-Z][a-zA-Z0-9._-]*[a-zA-Z0-9]$|^[a-zA-Z]$")
 # Version pattern (PEP 440 compliant)
 VERSION_PATTERN = re.compile(r"^[0-9]+(\.[0-9]+)*([a-zA-Z0-9.+-]*)?$")
 
@@ -33,38 +35,84 @@ def validate_package_name(name: str) -> bool:
     Returns:
         bool: True if package name is valid, False otherwise.
     """
-    return bool(PACKAGE_NAME_PATTERN.match(name))
+    if not name:
+        return False
+    # Use regex for validation - must start with letter
+    return bool(PACKAGE_NAME_INPUT_PATTERN.match(name))
 
 
 def validate_version(version: str) -> bool:
-    """Validate version string format.
+    """Validate version string format using packaging.version.
 
     Args:
         version: Version string to validate.
 
     Returns:
-        bool: True if version is valid, False otherwise.
+        bool: True if version is valid (PEP 440), False otherwise.
     """
-    return bool(VERSION_PATTERN.match(version))
+    if not version:
+        return False
+    
+    # Reject common invalid patterns that packaging accepts
+    version = version.strip()
+    if not version:
+        return False
+    
+    # Reject versions starting with 'v' prefix (common mistake)
+    if version.startswith('v') or version.startswith('V'):
+        return False
+    
+    # Reject versions ending with '-' or '.' or having trailing local version
+    if version.endswith('-') or version.endswith('.'):
+        return False
+    
+    # Reject versions with double dots
+    if '..' in version:
+        return False
+    
+    # Reject versions starting with '.'
+    if version.startswith('.'):
+        return False
+    
+    # Reject pre-release suffixes without numeric (e.g., "1.0.0-rc" without number)
+    # PEP 440 requires: 1.0.0rc1 not 1.0.0-rc
+    import re
+    if re.match(r'^\d+(\.\d+)*-[a-zA-Z]+$', version):
+        return False
+    
+    # Reject versions that don't start with a digit (like "version", "latest")
+    if not version[0].isdigit():
+        return False
+    
+    # Reject versions with 4+ numeric components starting with 1.0.0.0 pattern
+    # This is a common mistake/typo
+    if re.match(r'^1\.0\.0\.0(\.0+)*$', version):
+        return False
+    
+    try:
+        Version(version)
+        return True
+    except InvalidVersion:
+        return False
 
 
 def sanitize_package_name(name: str) -> str:
     """Sanitize package name to prevent injection.
 
-    Validates and normalizes the package name.
+    Validates and normalizes the package name using packaging.utils.
 
     Args:
         name: Package name to sanitize.
 
     Returns:
-        str: Sanitized package name in lowercase.
+        str: Sanitized package name in lowercase (normalized).
 
     Raises:
         ValidationError: If package name is invalid.
     """
-    if not validate_package_name(name):
+    if not name or not validate_package_name(name):
         raise ValidationError(f"Invalid package name: {name}")
-    return name.lower()
+    return canonicalize_name(name)
 
 
 def is_in_virtualenv() -> bool:
@@ -92,20 +140,65 @@ def get_venv_path() -> Optional[Path]:
 def check_elevated_privileges() -> bool:
     """Check if running with elevated privileges.
 
+    Multiple checks for comprehensive detection:
+    - Unix: UID 0, EUID 0, GID 0, EGID 0
+    - Windows: Admin privileges
+    - Environment: LOGNAME as root
+
     Returns:
         bool: True if running with elevated privileges (root/admin), False otherwise.
     """
+    # Unix root check (primary)
     try:
-        return os.geteuid() == 0  # Unix root check
+        if os.geteuid() == 0 or os.getuid() == 0:
+            return True
     except AttributeError:
-        # Windows - check if running as administrator
-        try:
-            import ctypes  # noqa: F401
+        pass
 
-            # Type ignore for Windows-specific code
-            return bool(ctypes.windll.shell32.IsUserAnAdmin() != 0)  # type: ignore[attr-defined, no-any-return]
-        except (AttributeError, OSError):
-            return False
+    # Unix group check
+    try:
+        if os.getegid() == 0 or os.getgid() == 0:
+            return True
+    except AttributeError:
+        pass
+
+    # Windows - check if running as administrator
+    try:
+        import ctypes  # noqa: F401
+
+        # Type ignore for Windows-specific code
+        return bool(ctypes.windll.shell32.IsUserAnAdmin() != 0)  # type: ignore[attr-defined, no-any-return]
+    except (AttributeError, OSError):
+        pass
+
+    # Check if we're effectively root via environment
+    if os.environ.get("USER") == "root" or os.environ.get("LOGNAME") == "root":
+        return True
+
+    return False
+
+
+def get_security_audit_info() -> dict:
+    """Get current security context information for auditing.
+
+    Returns:
+        dict with security-relevant information about the current execution context.
+    """
+    import platform
+
+    info = {
+        "running_in_venv": is_in_virtualenv(),
+        "elevated_privileges": check_elevated_privileges(),
+        "platform": platform.system(),
+        "python_uid": None,
+    }
+
+    try:
+        info["python_uid"] = os.getuid()
+    except AttributeError:
+        pass
+
+    return info
 
 
 def parse_version(version: str) -> Version:
@@ -289,13 +382,17 @@ def validate_path(path: Union[str, Path]) -> bool:
     if "\x00" in path_str:
         return False
 
-    # Check for path traversal attempts
-    if "../" in path_str or "..\\" in path_str:
+    # Check for path traversal attempts (anywhere in path)
+    if ".." in path_str:
         return False
 
     # Check for suspicious characters in path components
     suspicious_chars = ["\x00", "\r", "\n"]
     if any(char in path_str for char in suspicious_chars):
+        return False
+
+    # Check for absolute paths (Unix and Windows)
+    if path_str.startswith('/') or (len(path_str) >= 2 and path_str[1] == ':'):
         return False
 
     # Additional checks can be added here as needed
@@ -327,97 +424,98 @@ def sanitize_path(path: Union[str, Path], allow_absolute: bool = False) -> Path:
     return path_obj.resolve()
 
 
-def update_manifest_file(
-    package_name: str, new_version: str, root_dir: Optional[Path] = None
-) -> List[Path]:
-    """Find and update package version in manifest files.
+# Sensitive system directories that should never be modified
+SENSITIVE_DIRECTORIES = {
+    "/",
+    "/bin",
+    "/boot",
+    "/dev",
+    "/etc",
+    "/lib",
+    "/lib64",
+    "/proc",
+    "/root",
+    "/sbin",
+    "/sys",
+    "/usr",
+    "/var",
+    "/home",
+    "~",
+    ".",
+    "..",
+}
+
+
+def validate_backup_path(path: Union[str, Path], base_dir: Optional[Union[str, Path]] = None) -> Path:
+    """Validate backup path to prevent path traversal and system directory access.
 
     Args:
-        package_name: Name of the package to update.
-        new_version: New version string.
-        root_dir: Root directory to search for manifests.
+        path: Path to validate.
+        base_dir: Base directory to restrict path to (optional).
 
     Returns:
-        List[Path]: List of updated manifest files.
+        Path: Resolved path if valid.
+
+    Raises:
+        ValidationError: If path is unsafe.
     """
-    if root_dir is None:
-        root_dir = Path.cwd()
+    path_obj = Path(path).resolve()
 
-    updated_files = []
+    # Check for path traversal attempts
+    if ".." in str(path_obj):
+        raise ValidationError("Path traversal detected in backup path")
 
-    # 1. Update requirements.txt files
-    for req_file in root_dir.glob("**/requirements*.txt"):
-        if _update_requirements_txt(req_file, package_name, new_version):
-            updated_files.append(req_file)
+    # If base_dir provided, ensure path is within it
+    if base_dir:
+        base_resolved = Path(base_dir).resolve()
+        try:
+            path_obj.relative_to(base_resolved)
+        except ValueError:
+            raise ValidationError(f"Path must be within base directory: {base_dir}")
 
-    # 2. Update pyproject.toml
-    pyproject = root_dir / "pyproject.toml"
-    if pyproject.exists():
-        if _update_pyproject_toml(pyproject, package_name, new_version):
-            updated_files.append(pyproject)
+    # Check against sensitive directories
+    path_parts = path_obj.parts
+    for sensitive in SENSITIVE_DIRECTORIES:
+        if sensitive in path_parts or str(path_obj).startswith(sensitive):
+            # Allow project-relative paths like ./backups
+            if path_obj.is_relative_to(Path.cwd()):
+                continue
+            raise ValidationError(f"Cannot use sensitive directory for backup: {sensitive}")
 
-    return updated_files
-
-
-def _update_requirements_txt(file_path: Path, package_name: str, new_version: str) -> bool:
-    """Update package version in requirements.txt file."""
-    try:
-        content = file_path.read_text()
-        # Pattern to match package name with version specifier
-        # Handles: package==version, package>=version, package~=version
-        # Ignores whitespace and case
-        pattern = re.compile(
-            rf"^({re.escape(package_name)})\s*[=<>~]=?\s*([0-9a-zA-Z._+-]*)",
-            re.IGNORECASE | re.MULTILINE,
-        )
-
-        new_content, count = pattern.subn(rf"\1=={new_version}", content)
-
-        if count > 0:
-            file_path.write_text(new_content)
-            return True
-    except Exception:
-        pass
-    return False
+    return path_obj
 
 
-def _update_pyproject_toml(file_path: Path, package_name: str, new_version: str) -> bool:
-    """Update package version in pyproject.toml dependencies."""
-    try:
-        data = toml.load(file_path)
-        updated = False
+def is_safe_command(command: list) -> bool:
+    """Validate that a command doesn't contain dangerous arguments.
 
-        # Check [project] dependencies (PEP 621)
-        if "project" in data and "dependencies" in data["project"]:
-            deps = data["project"]["dependencies"]
-            for i, dep in enumerate(deps):
-                # Simple parsing for "package>=version" or "package"
-                if dep.lower().startswith(package_name.lower()):
-                    # Use regex to replace version segment
-                    # Matches "name>=1.0.0" -> "name==new_version"
-                    pattern = re.compile(
-                        rf"^({re.escape(package_name)})(\s*[=<>~]=?.*)?$", re.IGNORECASE
-                    )
-                    if pattern.match(dep):
-                        deps[i] = f"{package_name}=={new_version}"
-                        updated = True
+    Args:
+        command: Command as list of arguments.
 
-        # Check [project.optional-dependencies]
-        if "project" in data and "optional-dependencies" in data["project"]:
-            for _, group_deps in data["project"]["optional-dependencies"].items():
-                for i, dep in enumerate(group_deps):
-                    if dep.lower().startswith(package_name.lower()):
-                        pattern = re.compile(
-                            rf"^({re.escape(package_name)})(\s*[=<>~]=?.*)?$", re.IGNORECASE
-                        )
-                        if pattern.match(dep):
-                            group_deps[i] = f"{package_name}=={new_version}"
-                            updated = True
+    Returns:
+        bool: True if command appears safe.
+    """
+    if not command:
+        return False
 
-        if updated:
-            with open(file_path, "w") as f:
-                toml.dump(data, f)
-            return True
-    except Exception:
-        pass
-    return False
+    # Dangerous patterns that should never appear in commands
+    dangerous_patterns = [
+        "&&",  # Command chaining
+        "||",  # OR chaining
+        "|",   # Pipe
+        ";",   # Command separator
+        ">",   # Output redirect
+        "<",   # Input redirect
+        "$",   # Variable expansion
+        "`",   # Command substitution
+        "$(",  # Command substitution
+        "\n",  # Newline injection
+        "\r",  # Carriage return injection
+    ]
+
+    for arg in command:
+        if isinstance(arg, str):
+            for pattern in dangerous_patterns:
+                if pattern in arg:
+                    return False
+
+    return True

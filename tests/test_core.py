@@ -350,6 +350,8 @@ class TestRunUpdateSession:
     @patch("covert.core.get_outdated_packages")
     def test_no_virtualenv_raises_error(self, mock_outdated, mock_venv):
         """Test that missing virtualenv raises error."""
+        from covert.exceptions import SecurityError
+
         mock_venv.return_value = False
 
         config = Config(

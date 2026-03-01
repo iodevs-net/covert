@@ -10,9 +10,10 @@ from pathlib import Path
 from typing import Dict, List, Optional, Union
 
 from covert.config import BackupConfig
-from covert.exceptions import BackupError, PipError
+from covert.exceptions import BackupError, PipError, ValidationError
 from covert.logger import get_logger
 from covert.pip_interface import freeze_requirements, install_package
+from covert.utils import validate_backup_path
 
 logger = get_logger(__name__)
 
@@ -39,9 +40,18 @@ def create_backup(
 
     # Determine backup location
     if custom_path:
-        backup_path = Path(custom_path)
+        try:
+            backup_path = validate_backup_path(custom_path)
+        except ValidationError as e:
+            logger.error(f"Invalid backup path: {e}")
+            raise BackupError(f"Invalid backup path: {e}") from e
     else:
-        backup_dir = Path(config.location)
+        try:
+            backup_dir = validate_backup_path(config.location)
+        except ValidationError as e:
+            logger.error(f"Invalid backup directory: {e}")
+            raise BackupError(f"Invalid backup directory: {e}") from e
+        
         try:
             backup_dir.mkdir(parents=True, exist_ok=True)
         except OSError as e:
