@@ -396,6 +396,23 @@ def _update_package(
             result.status = UpdateStatus.UPDATED
             return result
 
+        # Analyze dependency impact before installation
+        from covert.dependency_analyzer import analyze_package_impact
+
+        logger.info(f"Analyzing dependency impact for {package.name}=={package.latest_version}...")
+        impact = analyze_package_impact(package.name, package.latest_version)
+
+        if not impact["can_resolve"]:
+            logger.error(f"Cannot install {package.name}: {impact['resolution_error']}")
+            result.status = UpdateStatus.FAILED_INSTALL
+            result.error_message = f"Dependency resolution failed: {impact['resolution_error']}"
+            return result
+
+        if impact["current_deps_ok"]:
+            logger.info("Current dependencies: OK")
+        else:
+            logger.warning(f"Current environment has broken dependencies: {impact['current_broken']}")
+
         # Store current version for rollback
         old_version = package.current_version
 
